@@ -224,25 +224,43 @@ fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
     let block = styled_block(i18n::main_title(lang));
     let menu = i18n::main_menu(lang);
 
+    // Check completion status for each menu item
+    let completion_status = vec![
+        app.config.completed.zsh_installed || app.config.completed.omz_installed,
+        app.config.completed.docker_installed,
+        app.config.completed.ssh_key_generated,
+        !app.config.completed.tools_installed.is_empty(),
+        app.config.completed.ssh_server_installed,
+        app.config.completed.vim_installed,
+        app.config.completed.nvm_installed,
+        app.config.completed.chinese_locale_configured,
+    ];
+
     let items: Vec<ListItem> = menu
         .iter()
         .enumerate()
         .map(|(i, (name, desc))| {
-            let marker = if i == app.menu_index {
+            let is_selected = i == app.menu_index;
+            let marker = if is_selected {
                 Span::styled("  ▸ ", Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
             } else {
                 Span::raw("    ")
             };
+            let status_mark = if completion_status.get(i).copied().unwrap_or(false) {
+                Span::styled("✓ ", Style::default().fg(C_SUCCESS))
+            } else {
+                Span::raw("  ")
+            };
             let name_s = Span::styled(
                 *name,
-                if i == app.menu_index {
+                if is_selected {
                     Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::Reset)
                 },
             );
             let desc_s = Span::styled(format!("  — {}", desc), Style::default().fg(C_DIM));
-            ListItem::new(Line::from(vec![marker, name_s, desc_s]))
+            ListItem::new(Line::from(vec![marker, status_mark, name_s, desc_s]))
         })
         .collect();
 
@@ -712,6 +730,12 @@ fn handle_lang_select(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Act
             app.lang_selected = true;
             app.page = Page::MainMenu;
             app.status_msg = i18n::msg_press_esc(app.lang).into();
+            // Save language to config
+            app.config.language = Some(match app.lang {
+                Lang::Chinese => "zh".to_string(),
+                Lang::English => "en".to_string(),
+            });
+            let _ = app.config.save();
         }
         _ => {}
     }
@@ -790,6 +814,8 @@ fn handle_shell_enter(
                 Ok(()) => {
                     app.zsh_installed = true;
                     app.status_msg = i18n::msg_success(lang, "zsh");
+                    app.config.completed.zsh_installed = true;
+                    let _ = app.config.save();
                 }
                 Err(e) => app.status_msg = i18n::msg_fail(lang, "zsh", &e.to_string()),
             }
@@ -815,6 +841,8 @@ fn handle_shell_enter(
                     app.omz_installed = true;
                     app.omz_configured = true;
                     app.status_msg = i18n::msg_success(lang, "Oh My Zsh");
+                    app.config.completed.omz_installed = true;
+                    let _ = app.config.save();
                 }
                 Err(e) => {
                     app.status_msg = i18n::msg_fail(lang, "Oh My Zsh", &e.to_string())
@@ -860,6 +888,8 @@ fn handle_shell_enter(
                         Lang::Chinese => "✅ zsh 已设为默认 Shell (重新登录生效)".into(),
                         Lang::English => "✅ zsh set as default shell (re-login required)".into(),
                     };
+                    app.config.completed.zsh_default = true;
+                    let _ = app.config.save();
                 }
                 Err(e) => {
                     app.status_msg =
@@ -889,6 +919,8 @@ fn handle_theme(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> 
                         Lang::Chinese => format!("✅ 主题已设置为: {}", theme),
                         Lang::English => format!("✅ Theme set to: {}", theme),
                     };
+                    app.config.completed.zsh_theme = Some(theme.to_string());
+                    let _ = app.config.save();
                 }
                 Err(e) => app.status_msg = i18n::msg_fail(lang, "theme", &e.to_string()),
             }
@@ -914,6 +946,8 @@ fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>
                                 format!("✅ {} plugins configured", app.selected_plugins.len())
                             }
                         };
+                        app.config.completed.zsh_plugins = app.selected_plugins.clone();
+                        let _ = app.config.save();
                     }
                     Err(e) => app.status_msg = i18n::msg_fail(lang, "plugins", &e.to_string()),
                 }
@@ -943,6 +977,8 @@ fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>
                                 format!("✅ {} plugins configured", app.selected_plugins.len())
                             }
                         };
+                        app.config.completed.zsh_plugins = app.selected_plugins.clone();
+                        let _ = app.config.save();
                     }
                     Err(e) => app.status_msg = i18n::msg_fail(lang, "plugins", &e.to_string()),
                 }

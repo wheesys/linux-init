@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::distro::Distro;
 use crate::i18n::Lang;
 
@@ -31,6 +32,7 @@ pub struct App {
     pub distro: Distro,
     pub lang: Lang,
     pub lang_selected: bool,
+    pub config: Config,
     pub running: bool,
     pub page: Page,
     pub status_msg: String,
@@ -140,6 +142,7 @@ pub const TOOLS: &[(&str, &str, &str)] = &[
 
 impl App {
     pub fn new(distro: Distro) -> Self {
+        let config = Config::load();
         let home = dirs::home_dir().unwrap_or_default();
         let zsh_installed = crate::distro::is_package_installed("zsh");
         let omz_installed = home.join(".oh-my-zsh").exists();
@@ -165,23 +168,33 @@ impl App {
             vec!["git".to_string()]
         };
 
-        // Detect language from system locale
-        let sys_lang = std::env::var("LANG").unwrap_or_default();
-        let default_lang = if sys_lang.starts_with("zh") {
-            Lang::Chinese
+        // Detect language from config or system locale
+        let (lang, lang_selected, page) = if let Some(ref lang_str) = config.language {
+            let lang = match lang_str.as_str() {
+                "zh" => Lang::Chinese,
+                _ => Lang::English,
+            };
+            (lang, true, Page::MainMenu)
         } else {
-            Lang::English
+            let sys_lang = std::env::var("LANG").unwrap_or_default();
+            let default_lang = if sys_lang.starts_with("zh") {
+                Lang::Chinese
+            } else {
+                Lang::English
+            };
+            (default_lang, false, Page::LangSelect)
         };
 
         Self {
             distro,
-            lang: default_lang,
-            lang_selected: false,
+            lang,
+            lang_selected,
+            config,
             running: true,
-            page: Page::LangSelect,
+            page,
             status_msg: String::new(),
 
-            lang_index: if default_lang == Lang::Chinese { 0 } else { 1 },
+            lang_index: if lang == Lang::Chinese { 0 } else { 1 },
             menu_index: 0,
 
             shell_index: 0,

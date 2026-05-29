@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod distro;
 mod i18n;
 mod modules;
@@ -64,4 +65,72 @@ fn refresh_state(app: &mut App) {
 
     let current_shell = std::env::var("SHELL").unwrap_or_default();
     app.default_shell_set = current_shell.contains("zsh");
+
+    // Sync config with actual state
+    let mut config_changed = false;
+
+    if app.zsh_installed && !app.config.completed.zsh_installed {
+        app.config.completed.zsh_installed = true;
+        config_changed = true;
+    }
+    if app.omz_installed && !app.config.completed.omz_installed {
+        app.config.completed.omz_installed = true;
+        config_changed = true;
+    }
+    if app.docker_installed && !app.config.completed.docker_installed {
+        app.config.completed.docker_installed = true;
+        config_changed = true;
+    }
+    if app.compose_installed && !app.config.completed.docker_compose_installed {
+        app.config.completed.docker_compose_installed = true;
+        config_changed = true;
+    }
+    if app.docker_user_configured && !app.config.completed.docker_user_configured {
+        app.config.completed.docker_user_configured = true;
+        config_changed = true;
+    }
+    if app.ssh_key_exists && !app.config.completed.ssh_key_generated {
+        app.config.completed.ssh_key_generated = true;
+        config_changed = true;
+    }
+    if app.sshd_installed && !app.config.completed.ssh_server_installed {
+        app.config.completed.ssh_server_installed = true;
+        config_changed = true;
+    }
+    if app.sshd_root_disabled && !app.config.completed.ssh_server_configured {
+        app.config.completed.ssh_server_configured = true;
+        config_changed = true;
+    }
+    if app.vim_installed && !app.config.completed.vim_installed {
+        app.config.completed.vim_installed = true;
+        config_changed = true;
+    }
+    if app.vundle_installed && !app.config.completed.vundle_installed {
+        app.config.completed.vundle_installed = true;
+        config_changed = true;
+    }
+    if app.nvm_installed && !app.config.completed.nvm_installed {
+        app.config.completed.nvm_installed = true;
+        config_changed = true;
+    }
+    if app.node_installed && !app.config.completed.node_installed {
+        app.config.completed.node_installed = true;
+        config_changed = true;
+    }
+    if app.locale_configured && !app.config.completed.chinese_locale_configured {
+        app.config.completed.chinese_locale_configured = true;
+        config_changed = true;
+    }
+    if app.fonts_installed && !app.config.completed.chinese_fonts_installed {
+        app.config.completed.chinese_fonts_installed = true;
+        config_changed = true;
+    }
+    if app.fcitx_installed && !app.config.completed.fcitx5_installed {
+        app.config.completed.fcitx5_installed = true;
+        config_changed = true;
+    }
+
+    if config_changed {
+        let _ = app.config.save();
+    }
 }
