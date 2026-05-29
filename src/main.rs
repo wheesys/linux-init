@@ -1,5 +1,6 @@
 mod app;
 mod distro;
+mod i18n;
 mod modules;
 mod ui;
 
@@ -17,7 +18,7 @@ fn main() -> Result<()> {
     ui::restore_terminal(&mut terminal)?;
 
     if let Err(ref e) = result {
-        eprintln!("错误: {}", e);
+        eprintln!("Error: {}", e);
     }
 
     result
@@ -51,9 +52,13 @@ fn refresh_state(app: &mut App) {
     app.compose_installed = distro::is_package_installed("docker-compose");
     app.docker_user_configured = modules::docker::is_user_in_docker_group();
     app.ssh_key_exists = modules::ssh::has_ssh_key();
+    app.sshd_installed = modules::ssh_server::is_installed();
+    app.sshd_root_disabled = modules::ssh_server::is_root_login_disabled();
     app.locale_configured = modules::locale::is_locale_configured();
     app.fcitx_installed = modules::locale::is_fcitx_installed();
     app.fonts_installed = distro::is_package_installed("noto-fonts-cjk");
+    app.vim_installed = distro::is_package_installed("vim");
+    app.vundle_installed = home.join(".vim/bundle/Vundle.vim").exists();
 
     let current_shell = std::env::var("SHELL").unwrap_or_default();
     app.default_shell_set = current_shell.contains("zsh");

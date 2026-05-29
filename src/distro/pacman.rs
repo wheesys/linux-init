@@ -47,6 +47,8 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
         "fcitx5" => Some("fcitx5"),
         "fcitx5-chinese-addons" => Some("fcitx5-chinese-addons"),
         "fcitx5-configtool" => Some("fcitx5-configtool"),
+        "vim" => Some("vim"),
+        "openssh" => Some("openssh"),
         _ => None,
     }
 }

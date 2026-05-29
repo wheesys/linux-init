@@ -6,10 +6,13 @@ Linux Init 是一个零依赖的命令行工具，通过图形化菜单引导用
 
 ## 功能特性
 
+- 🌐 **多语言支持** — 启动时选择中文或英文界面
 - 🐚 **Shell 配置** — 安装 zsh + Oh My Zsh，选择主题和插件，设为默认 shell
 - 🐳 **Docker 安装** — 安装 Docker 引擎和 Docker Compose，配置非 root 使用
 - 🔑 **SSH Key 生成** — 一键生成 Ed25519 或 RSA 密钥对
 - 🔧 **基础工具** — 批量安装常用开发工具（git, neovim, tmux, ripgrep 等）
+- 🖥️ **SSH 服务** — 安装 OpenSSH Server，配置安全选项（禁止 root 登录），启动服务
+- 📝 **Vim 配置** — 安装 Vim、Vundle 插件管理器，选择 12+ 实用插件
 - 🇨🇳 **中文配置** — 配置中文 locale、CJK 字体和 Fcitx5 输入法
 
 ## 支持的发行版
@@ -49,6 +52,8 @@ sudo dpkg -i linux-init_*.deb
 启动后会进入 TUI 界面，使用方向键导航：
 
 ```
+语言选择 (中文 / English)
+
 主菜单
 ├── 🐚 Shell 配置
 │   ├── 安装 Zsh
@@ -69,6 +74,14 @@ sudo dpkg -i linux-init_*.deb
 │   ├── 开发工具: git, curl, wget, neovim, jq
 │   ├── 系统工具: htop, tmux
 │   └── CLI 增强: ripgrep, fd, bat, eza
+├── 🖥️ SSH 服务
+│   ├── 安装 OpenSSH Server
+│   ├── 配置安全选项 (禁止 root 远程登录)
+│   └── 启动 SSH 服务
+├── 📝 Vim 配置
+│   ├── 安装 Vim
+│   ├── 安装 Vundle 插件管理器
+│   └── 选择插件 (12+ 实用插件，含功能描述)
 └── 🇨🇳 中文配置
     ├── 配置中文 locale
     ├── 安装中文字体 (Noto CJK)
@@ -87,7 +100,7 @@ sudo dpkg -i linux-init_*.deb
 
 - **语言：** Rust
 - **TUI 框架：** ratatui + crossterm
-- **特性：** 单一静态链接二进制，零运行时依赖，编译后仅 735KB
+- **特性：** 单一静态链接二进制，零运行时依赖，编译后仅 784KB
 
 ## 项目结构
 
@@ -100,11 +113,14 @@ linux-init/
 │   │   ├── detect.rs     # /etc/os-release 解析
 │   │   ├── pacman.rs     # Arch 系包管理
 │   │   └── apt.rs        # Debian 系包管理
+│   ├── i18n.rs           # 国际化 (中英文)
 │   ├── modules/          # 业务逻辑模块
 │   │   ├── shell.rs      # Shell 配置
 │   │   ├── docker.rs     # Docker 安装
 │   │   ├── ssh.rs        # SSH 密钥生成
+│   │   ├── ssh_server.rs # SSH 服务配置
 │   │   ├── tools.rs      # 工具安装
+│   │   ├── vim.rs        # Vim 配置
 │   │   └── locale.rs     # 中文配置
 │   └── ui/               # TUI 界面渲染
 │       └── mod.rs        # 界面组件和事件处理

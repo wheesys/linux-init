@@ -8,7 +8,13 @@
       "Bash(file *)",
       "Bash(ldd *)",
       "Bash(git log *)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git *)"
     ]
   },
   "$version": 4
