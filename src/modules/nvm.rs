@@ -77,6 +77,11 @@ pub fn install_nvm() -> anyhow::Result<()> {
     if !install_status.success() || !installed {
         anyhow::bail!("NVM 安装失败");
     }
+
+    // 安装成功后自动配置 shell 集成
+    log.log("Auto-configuring shell integration...")?;
+    ensure_shell_integration()?;
+
     Ok(())
 }
 
