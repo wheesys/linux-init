@@ -96,6 +96,51 @@ sudo dpkg -i linux-init_*.deb
 - `Esc` — 返回上级菜单
 - `q` — 退出程序
 
+## 依赖
+
+Linux Init 在运行时会使用以下系统工具和命令行程序：
+
+### 系统自带工具（无需额外安装）
+
+| 工具 | 用途 |
+|------|------|
+| sudo | 权限提升，执行安装和管理操作 |
+| sh / bash | 执行 shell 脚本 |
+| chown | 修改文件所有者权限 |
+| getent | 获取用户主目录等账户信息 |
+| systemctl | 启用/启动/查询系统服务 |
+| groups | 查询用户所属组 |
+| locale | 查询系统语言环境 |
+| dpkg | 查询 Debian/Ubuntu 系软件包状态 |
+| pacman | Arch 系软件包管理 |
+| ssh-keygen | 生成 SSH 密钥对 |
+| which | 检测命令是否存在 |
+| chsh | 修改用户默认登录 shell |
+| tee | 写入需要 root 权限的系统文件 |
+
+### 按需自动安装的外部依赖
+
+以下工具仅在用户使用对应功能时才会检查并自动安装：
+
+| 工具 | 用途 | 触发功能 |
+|------|------|----------|
+| curl | 下载安装脚本 | Shell (Oh My Zsh)、Node.js (nvm) |
+| git | 克隆插件仓库 | Shell (Oh My Zsh 插件)、Vim (Vundle 及插件) |
+| vim | 执行 `:PluginInstall` | Vim (插件安装) |
+
+### 功能模块所需软件包
+
+各功能模块通过系统包管理器自动安装的软件：
+
+| 模块 | 安装的软件包 |
+|------|------------|
+| Shell 配置 | zsh |
+| Docker 安装 | docker, docker-compose (或 docker-compose-v2) |
+| SSH 服务 | openssh (Arch) 或 openssh-server (Debian) |
+| 中文配置 | noto-fonts-cjk (或 fonts-noto-cjk), fcitx5, fcitx5-chinese-addons, fcitx5-configtool |
+| 基础工具 | 用户选择的工具（如 git, curl, wget, htop, neovim, tmux, jq, ripgrep, fd, bat, eza） |
+| Vim 配置 | vim |
+
 ## 技术栈
 
 - **语言：** Rust
