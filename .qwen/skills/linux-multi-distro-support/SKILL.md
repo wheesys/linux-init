@@ -56,6 +56,8 @@ Different distros use different package names for the same tool:
 | docker-compose | `docker-compose` | `docker-compose-v2` |
 | CJK fonts | `noto-fonts-cjk` | `fonts-noto-cjk` |
 | docker | `docker` | `docker.io` |
+| SSH server | `openssh` | `openssh-server` |
+| vim | `vim` | `vim` |
 
 Maintain a mapping function per distro family:
 
@@ -123,6 +125,88 @@ if let Some(ref mut stdin) = child.stdin {
 }
 drop(child.stdin.take());
 child.wait()?;
+```
+
+## SSH Server Configuration
+
+Package names differ (`openssh` vs `openssh-server`), and `sshd_config` editing requires `sudo tee`:
+
+```rust
+fn disable_root_login() -> anyhow::Result<()> {
+    let content = fs::read_to_string("/etc/ssh/sshd_config")?;
+    let mut new_content = String::new();
+    let mut found = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("PermitRootLogin") || trimmed.starts_with("#PermitRootLogin") {
+            new_content.push_str("PermitRootLogin no\n");
+            found = true;
+        } else {
+            new_content.push_str(line);
+            new_content.push('\n');
+        }
+    }
+    if !found {
+        new_content.push_str("\nPermitRootLogin no\n");
+    }
+
+    // Write via sudo tee (file is root-owned)
+    let mut child = Command::new("sudo")
+        .args(["tee", "/etc/ssh/sshd_config"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()?;
+    if let Some(ref mut stdin) = child.stdin {
+        stdin.write_all(new_content.as_bytes())?;
+    }
+    drop(child.stdin.take());
+    child.wait()?;
+    Ok(())
+}
+```
+
+Check if already configured:
+```rust
+fn is_root_login_disabled() -> bool {
+    fs::read_to_string("/etc/ssh/sshd_config")
+        .map(|c| c.lines().any(|l| l.trim() == "PermitRootLogin no"))
+        .unwrap_or(false)
+}
+```
+
+Start service (identical on both families):
+```rust
+Command::new("sudo")
+    .args(["systemctl", "enable", "--now", "sshd"])
+    .status()?;
+```
+
+## Vim + Vundle Plugin Manager
+
+Vim package name is `vim` on both families. Vundle install via git clone:
+
+```rust
+let home = dirs::home_dir()?;
+let vundle_dir = home.join(".vim/bundle/Vundle.vim");
+if !vundle_dir.exists() {
+    Command::new("git")
+        .args(["clone", "https://github.com/VundleVim/Vundle.vim.git", vundle_dir.to_str()?])
+        .status()?;
+}
+```
+
+Write `.vimrc` with Vundle plugin declarations:
+```
+set nocompatible
+filetype off
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+Plugin 'VundleVim/Vundle.vim'
+Plugin 'preservim/nerdtree'
+...
+call vundle#end()
+filetype plugin indent on
 ```
 
 ## Common Patterns Across Distros

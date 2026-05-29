@@ -201,6 +201,47 @@ let chunks = Layout::default()
 // chunks[0] = main content, chunks[1] = status bar
 ```
 
+## i18n Pattern (Zero-Dependency)
+
+For TUI apps supporting multiple languages, use a dedicated `i18n.rs` module with match-on-lang functions:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Lang { Chinese, English }
+
+// For static strings:
+pub fn main_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "环境初始化向导",
+        Lang::English => "Environment Setup Wizard",
+    }
+}
+
+// For dynamic strings (format!):
+pub fn msg_success(lang: Lang, name: &str) -> String {
+    match lang {
+        Lang::Chinese => format!("✅ {} 安装成功", name),
+        Lang::English => format!("✅ {} installed successfully", name),
+    }
+}
+
+// For descriptions indexed by name (plugins, tools, themes):
+pub fn plugin_desc(lang: Lang, name: &str) -> &'static str {
+    match (lang, name) {
+        (Lang::Chinese, "git") => "Git 别名和补全",
+        (Lang::English, "git") => "Git aliases and completions",
+        _ => "",
+    }
+}
+```
+
+**Key rules:**
+- Keep ALL display strings in `i18n.rs` — never hardcode Chinese/English in UI code
+- Use `&'static str` for constant strings, `String` only when `format!` is needed
+- Functions returning `&str` from a `kind`/`category` parameter must return `String` (not `&'static str`) because the fallback `_ => input` can't produce a `'static` reference
+- Detect default language from `$LANG` env var at startup: `if lang.starts_with("zh") { Chinese } else { English }`
+- Add a `LangSelect` page as the first screen before MainMenu
+
 ## Gotchas
 
 1. **`ListItem` lifetime**: `make_list_items` needs explicit lifetime annotation:
@@ -208,11 +249,19 @@ let chunks = Layout::default()
    fn make_list_items<'a>(items: &'a [(String, String)], ...) -> Vec<ListItem<'a>>
    ```
 
-2. **Closure lifetime in `Action::Execute`**: When returning a closure via `Box<dyn FnOnce>`, captured variables need `move`:
+2. **Closure lifetime in `Action::Execute`**: When returning a closure via `Box<dyn FnOnce>`, captured variables need `move`. **CRITICAL**: you CANNOT call `i18n::msg_success(lang, "name")` inside the closure because `lang` (even though `Copy`) won't live long enough for the `'static` closure. You MUST pre-compute the string into an owned `String` BEFORE the closure, then `move` it in:
    ```rust
-   let owned_data = data.clone();
+   // WRONG — won't compile:
+   Action::Execute(Box::new(|terminal| {
+       run_in_terminal(terminal, || install())?;
+       Ok(i18n::msg_success(lang, "Docker"))  // ERROR: lang doesn't live long enough
+   }))
+
+   // CORRECT — pre-compute, then move:
+   let success_msg = i18n::msg_success(lang, "Docker");
    Action::Execute(Box::new(move |terminal| {
-       // use owned_data here
+       run_in_terminal(terminal, || install())?;
+       Ok(success_msg)
    }))
    ```
 
@@ -227,3 +276,17 @@ let chunks = Layout::default()
    ```
 
 5. **Always call `terminal.clear()` after re-entering alternate screen** to avoid rendering artifacts.
+
+6. **Menu dispatch with closures for each action**: Instead of deeply nested match arms, use index-based dispatch:
+   ```rust
+   let idx = app.action_index;
+   Action::Execute(Box::new(move |terminal| {
+       run_in_terminal(terminal, || match idx {
+           0 => install_docker(),
+           1 => install_compose(),
+           2 => add_user_to_group(),
+           _ => Ok(()),
+       })?;
+       Ok(after_msg)
+   }))
+   ```

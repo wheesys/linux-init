@@ -148,9 +148,9 @@ fn make_list_items<'a>(
             let name_span = Span::styled(
                 name.as_str(),
                 if i == selected {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let desc_span = Span::styled(format!("  {}", desc), Style::default().fg(C_DIM));
