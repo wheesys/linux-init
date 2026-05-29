@@ -33,55 +33,63 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 下载脚本
+    // 下载脚本 - 使用 inherit 让用户看到进度
     let tmp_script = "/tmp/linux-init-omz-install.sh";
     writeln!(log, "Downloading install script to {}...", tmp_script)?;
+    log.flush()?;
     
     let download = Command::new("curl")
         .args(["-fsSL", "-o", tmp_script,
             "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
-        .output()?;
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
 
-    writeln!(log, "Download exit code: {:?}", download.status.code())?;
-    if !download.status.success() {
-        let stderr = String::from_utf8_lossy(&download.stderr);
-        writeln!(log, "Download failed: {}", stderr)?;
+    writeln!(log, "Download exit code: {:?}", download.code())?;
+    if !download.success() {
+        writeln!(log, "Download failed")?;
         anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接。日志: {:?}", log_path);
     }
 
     writeln!(log, "Download successful, script size: {} bytes", 
         std::fs::metadata(tmp_script).map(|m| m.len()).unwrap_or(0))?;
+    log.flush()?;
 
-    // 执行安装
+    // 执行安装 - 使用 inherit 让用户看到进度
     writeln!(log, "Checking SUDO_USER: {:?}", std::env::var("SUDO_USER"))?;
+    log.flush()?;
     
     let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
         writeln!(log, "Running as user: {}", sudo_user)?;
-        let cmd = format!("sudo -u {} sh {} \"\" --unattended 2>&1", 
-            sudo_user, tmp_script);
+        let cmd = format!("sudo -u {} sh {} \"\" --unattended", sudo_user, tmp_script);
         writeln!(log, "Command: {}", cmd)?;
+        log.flush()?;
         
-        let output = Command::new("sudo")
+        let status = Command::new("sudo")
             .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
-            .output()?;
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
         
-        writeln!(log, "Install exit code: {:?}", output.status.code())?;
-        writeln!(log, "Install stdout:\n{}", String::from_utf8_lossy(&output.stdout))?;
-        writeln!(log, "Install stderr:\n{}", String::from_utf8_lossy(&output.stderr))?;
-        
-        output.status
+        writeln!(log, "Install exit code: {:?}", status.code())?;
+        status
     } else {
         writeln!(log, "Running as current user (no SUDO_USER)")?;
-        let output = Command::new("sh")
+        log.flush()?;
+        
+        let status = Command::new("sh")
             .args([tmp_script, "", "--unattended"])
-            .output()?;
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
         
-        writeln!(log, "Install exit code: {:?}", output.status.code())?;
-        writeln!(log, "Install stdout:\n{}", String::from_utf8_lossy(&output.stdout))?;
-        writeln!(log, "Install stderr:\n{}", String::from_utf8_lossy(&output.stderr))?;
-        
-        output.status
+        writeln!(log, "Install exit code: {:?}", status.code())?;
+        status
     };
+    log.flush()?;
 
     // 清理
     let _ = std::fs::remove_file(tmp_script);
