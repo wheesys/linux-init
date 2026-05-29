@@ -59,6 +59,7 @@ pub struct App {
     pub docker_installed: bool,
     pub compose_installed: bool,
     pub docker_user_configured: bool,
+    pub docker_service_running: bool,
 
     // -- ssh key --
     pub ssh_index: usize,
@@ -286,6 +287,7 @@ impl App {
             docker_installed,
             compose_installed,
             docker_user_configured: false,
+            docker_service_running: false,
 
             ssh_index: 0,
             ssh_key_exists,

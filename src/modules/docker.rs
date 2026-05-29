@@ -56,7 +56,6 @@ pub fn start_docker_service() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn is_docker_running() -> bool {
     Command::new("systemctl")
         .arg("is-active")

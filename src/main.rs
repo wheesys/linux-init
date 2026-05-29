@@ -53,6 +53,7 @@ fn refresh_state(app: &mut App) {
     app.docker_installed = distro::is_package_installed("docker");
     app.compose_installed = distro::is_package_installed("docker-compose");
     app.docker_user_configured = modules::docker::is_user_in_docker_group();
+    app.docker_service_running = modules::docker::is_docker_running();
     app.ssh_key_exists = modules::ssh::has_ssh_key();
     app.sshd_installed = modules::ssh_server::is_installed();
     app.sshd_root_disabled = modules::ssh_server::is_root_login_disabled();
@@ -88,6 +89,10 @@ fn refresh_state(app: &mut App) {
     }
     if app.docker_user_configured && !app.config.completed.docker_user_configured {
         app.config.completed.docker_user_configured = true;
+        config_changed = true;
+    }
+    if app.docker_service_running && !app.config.completed.docker_service_running {
+        app.config.completed.docker_service_running = true;
         config_changed = true;
     }
     if app.ssh_key_exists && !app.config.completed.ssh_key_generated {

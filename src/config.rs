@@ -19,6 +19,7 @@ pub struct CompletedModules {
     pub docker_installed: bool,
     pub docker_compose_installed: bool,
     pub docker_user_configured: bool,
+    pub docker_service_running: bool,
 
     pub ssh_key_generated: bool,
     pub ssh_key_type: Option<String>,

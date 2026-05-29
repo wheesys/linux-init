@@ -486,7 +486,7 @@ fn render_docker(frame: &mut Frame, app: &App, area: Rect) {
         app.docker_installed,
         app.compose_installed,
         app.docker_user_configured,
-        false,
+        app.docker_service_running,
     ];
     let items = make_list_items(&items, app.docker_index, &statuses);
     let list = List::new(items)
@@ -1074,6 +1074,23 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         KeyCode::Up => app.docker_index = app.docker_index.saturating_sub(1),
         KeyCode::Down => app.docker_index = (app.docker_index + 1).min(max - 1),
         KeyCode::Enter => {
+            // 检查是否已完成，已完成则跳过
+            let already_done = match app.docker_index {
+                0 => app.docker_installed,
+                1 => app.compose_installed,
+                2 => app.docker_user_configured,
+                3 => app.docker_service_running,
+                _ => false,
+            };
+            
+            if already_done {
+                app.status_msg = match lang {
+                    Lang::Chinese => "✅ 已完成，无需重复操作".into(),
+                    Lang::English => "✅ Already completed, no need to repeat".into(),
+                };
+                return Ok(None);
+            }
+            
             let (before, after): (&str, String) = match (lang, app.docker_index) {
                 (Lang::Chinese, 0) => ("正在安装 Docker...", "✅ Docker 安装成功".into()),
                 (Lang::English, 0) => ("Installing Docker...", "✅ Docker installed".into()),

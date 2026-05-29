@@ -545,6 +545,148 @@ fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
 }
 ```
 
+## REVERSED Highlight + Checkbox Gotcha
+
+`Modifier::REVERSED` swaps foreground and background colors for the entire row. This works great for simple lists, but **breaks checkbox/multi-select pages** where items use different foreground colors (e.g., green `■` for selected, gray `□` for unselected).
+
+When REVERSED is applied to a row with colored checkboxes, the colors get swapped: green becomes green-on-black → black-on-green, and the visual meaning of `■` and `□` appears inverted.
+
+**Rule: Pages with checkboxes (■/□/✓/✗) must NOT use REVERSED in highlight_style.** Use only `BOLD`:
+
+```rust
+// Simple list (no checkboxes) — REVERSED is fine
+let list = List::new(items)
+    .highlight_style(Style::default().fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD | Modifier::REVERSED));
+
+// Multi-select list (with ■/□ checkboxes) — NO REVERSED
+let list = List::new(items)
+    .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+```
+
+The cursor marker `▸` already indicates the current position, so BOLD alone is sufficient for multi-select pages.
+
+## Colored Segment Preview Pattern
+
+For preview panels that simulate terminal output (e.g., shell prompts, color schemes), use a data structure with colored text segments:
+
+```rust
+// Data: each theme has lines, each line has (text, color_name) segments
+pub const THEME_PREVIEWS: &[(&str, &[&[(&str, &str)]])] = &[
+    ("robbyrussell", &[
+        &[("➜ ", "green"), ("~ ", "cyan"), ("git:(", "white"), ("master", "red"), (") ", "white"), ("✗", "red")],
+        &[],  // blank line
+        &[("Description text", "dim")],
+    ]),
+    // ...
+];
+
+// Rendering helper
+fn color_from_str(color: &str) -> (Option<Color>, Option<Color>) {
+    match color {
+        "blue_bg" => (Some(Color::Black), Some(Color::Blue)),
+        "green" => (Some(Color::Green), None),
+        "cyan" => (Some(Color::Cyan), None),
+        "blue" => (Some(Color::Blue), None),
+        "red" => (Some(Color::Red), None),
+        "yellow" => (Some(Color::Yellow), None),
+        "white" => (Some(Color::White), None),
+        "dim" => (Some(Color::DarkGray), None),
+        _ => (Some(Color::Reset), None),
+    }
+}
+
+// Render preview lines with colored spans
+let preview_lines: Vec<Line> = THEME_PREVIEWS
+    .iter()
+    .find(|(name, _)| *name == selected_theme)
+    .map(|(_, lines)| {
+        lines.iter().map(|line_segments| {
+            let spans: Vec<Span> = line_segments.iter()
+                .map(|(text, color_name)| {
+                    let (fg, bg) = color_from_str(color_name);
+                    let mut style = Style::default();
+                    if let Some(fg_color) = fg { style = style.fg(fg_color); }
+                    if let Some(bg_color) = bg { style = style.bg(bg_color); }
+                    if *color_name != "dim" {
+                        style = style.add_modifier(Modifier::BOLD);
+                    }
+                    Span::styled(*text, style)
+                })
+                .collect();
+            Line::from(spans)
+        }).collect()
+    }).unwrap_or_default();
+```
+
+**IMPORTANT**: The `preview_title` variable must be bound with `let` before passing to `styled_block()`:
+```rust
+// WRONG — temporary String dropped while borrowed by Block
+let preview_block = styled_block(&format!("{} — Preview", theme));
+
+// CORRECT — String lives long enough
+let preview_title = format!("{} — Preview", theme);
+let preview_block = styled_block(&preview_title);
+```
+
+## DownloadLogger Abstraction
+
+For TUI apps with multiple download operations, unify logging, network checks, execution, and permission fixes into a single utility:
+
+```rust
+pub struct DownloadLogger {
+    log: std::fs::File,
+}
+
+impl DownloadLogger {
+    pub fn new(log_name: &str) -> anyhow::Result<Self> {
+        let home = get_real_home()?;
+        let log_dir = home.join(".config").join("your-app");
+        fs::create_dir_all(&log_dir)?;
+        let mut log = OpenOptions::new()
+            .create(true).append(true)
+            .open(log_dir.join(log_name))?;
+        // Write header with timestamp
+        Ok(Self { log })
+    }
+
+    pub fn log(&mut self, msg: &str) -> anyhow::Result<()> {
+        writeln!(self.log, "{}", msg)?;
+        self.log.flush()?;
+        Ok(())
+    }
+
+    pub fn check_network(&mut self, url: &str) -> anyhow::Result<()> {
+        // curl -sSL --max-time 10 -o /dev/null url
+    }
+
+    pub fn run_download(&mut self, desc: &str, cmd: &str, args: &[&str])
+        -> anyhow::Result<ExitStatus> {
+        // Stdio::inherit() so user sees output
+    }
+
+    pub fn run_as_user(&mut self, desc: &str, user: &str, cmd: &str, args: &[&str])
+        -> anyhow::Result<ExitStatus> {
+        // sudo -u user cmd args
+    }
+
+    pub fn fix_ownership(&mut self, path: &str) {
+        // chown -R SUDO_USER:SUDO_USER path
+    }
+
+    pub fn finish(&mut self, success: bool) { /* write end marker */ }
+}
+```
+
+Every download operation then follows the same flow:
+1. `ensure_command("curl")` or `ensure_command("git")`
+2. `DownloadLogger::new("xxx-install.log")`
+3. Check if already installed → skip with log
+4. `log.check_network(url)` — mirror fallback if fails
+5. `log.run_download(desc, cmd, args)` — user sees progress
+6. `log.fix_ownership(path)` — correct sudo permissions
+7. `log.finish(success)`
+
 ## Oh-My-Zsh Installation Pattern
 
 The common curl-pipe pattern can fail due to shell expansion issues. Use download-then-execute instead:
