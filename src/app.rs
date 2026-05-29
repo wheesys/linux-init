@@ -241,18 +241,7 @@ impl App {
     }
 
     fn get_real_home() -> std::path::PathBuf {
-        if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-            if let Ok(output) = std::process::Command::new("getent")
-                .args(["passwd", &sudo_user])
-                .output()
-            {
-                let line = String::from_utf8_lossy(&output.stdout);
-                if let Some(home) = line.split(':').nth(5) {
-                    return std::path::PathBuf::from(home.trim());
-                }
-            }
-        }
-        dirs::home_dir().unwrap_or_default()
+        crate::utils::get_real_home().unwrap_or_else(|_| dirs::home_dir().unwrap_or_default())
     }
 
     fn read_current_theme(home: &std::path::Path) -> String {

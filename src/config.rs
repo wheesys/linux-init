@@ -58,8 +58,7 @@ impl Config {
         if let Some(path) = Self::config_path() {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)?;
-                
-                // If running with sudo, fix ownership to the real user
+
                 if let Ok(sudo_user) = std::env::var("SUDO_USER") {
                     let _ = std::process::Command::new("chown")
                         .args([&format!("{}:{}", sudo_user, sudo_user), parent.to_str().unwrap_or("")])
@@ -68,8 +67,7 @@ impl Config {
             }
             let content = serde_json::to_string_pretty(self)?;
             fs::write(&path, content)?;
-            
-            // If running with sudo, fix file ownership
+
             if let Ok(sudo_user) = std::env::var("SUDO_USER") {
                 let _ = std::process::Command::new("chown")
                     .args([&format!("{}:{}", sudo_user, sudo_user), path.to_str().unwrap_or("")])
@@ -79,24 +77,8 @@ impl Config {
         Ok(())
     }
 
-    /// Get config path, using SUDO_USER's home if running with sudo
     fn config_path() -> Option<PathBuf> {
-        let home = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-            // Running with sudo, get the real user's home
-            dirs::home_dir().and_then(|_| {
-                // Try to get SUDO_USER's home from /etc/passwd
-                let output = std::process::Command::new("getent")
-                    .args(["passwd", &sudo_user])
-                    .output()
-                    .ok()?;
-                let line = String::from_utf8_lossy(&output.stdout);
-                let home = line.split(':').nth(5)?;
-                Some(PathBuf::from(home))
-            })
-        } else {
-            dirs::home_dir()
-        };
-
-        home.map(|h| h.join(".config").join("linux-init").join("config.json"))
+        let home = crate::utils::get_real_home().ok()?;
+        Some(home.join(".config").join("linux-init").join("config.json"))
     }
 }

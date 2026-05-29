@@ -1,18 +1,6 @@
 use std::fs;
 use std::process::Command;
-
-fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        let output = Command::new("getent")
-            .args(["passwd", &sudo_user])
-            .output()?;
-        let line = String::from_utf8_lossy(&output.stdout);
-        if let Some(home) = line.split(':').nth(5) {
-            return Ok(std::path::PathBuf::from(home.trim()));
-        }
-    }
-    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
-}
+use crate::utils::get_real_home;
 
 pub fn generate_ed25519(email: &str) -> anyhow::Result<String> {
     let home = get_real_home()?;

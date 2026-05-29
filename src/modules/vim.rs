@@ -1,18 +1,5 @@
 use std::fs;
-use std::process::{Command, Stdio};
-
-fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        let output = Command::new("getent")
-            .args(["passwd", &sudo_user])
-            .output()?;
-        let line = String::from_utf8_lossy(&output.stdout);
-        if let Some(home) = line.split(':').nth(5) {
-            return Ok(std::path::PathBuf::from(home.trim()));
-        }
-    }
-    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
-}
+use crate::utils::{get_real_home, DownloadLogger};
 
 #[allow(dead_code)]
 pub fn is_vim_installed() -> bool {
@@ -33,31 +20,46 @@ pub fn is_vundle_installed() -> bool {
 }
 
 pub fn install_vundle() -> anyhow::Result<()> {
-    // 确保依赖命令存在
     crate::utils::ensure_command("git")?;
-    
+
     let home = get_real_home()?;
     let vundle_dir = home.join(".vim/bundle/Vundle.vim");
 
+    let mut log = DownloadLogger::new("vundle-install.log")?;
+    log.log(&format!("Vundle dir: {:?}", vundle_dir))?;
+
     if vundle_dir.exists() {
+        log.log("Vundle already exists, skipping")?;
+        log.finish(true);
         return Ok(());
     }
 
-    let status = Command::new("git")
-        .args([
-            "clone",
-            "https://github.com/VundleVim/Vundle.vim.git",
-            vundle_dir.to_str().unwrap(),
-        ])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    let repo = "https://github.com/VundleVim/Vundle.vim.git";
+    log.check_network(repo)?;
+
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user(
+            "Clone Vundle",
+            &sudo_user,
+            "git",
+            &["clone", repo, vundle_dir.to_str().unwrap()],
+        )?
+    } else {
+        log.run_download(
+            "Clone Vundle",
+            "git",
+            &["clone", repo, vundle_dir.to_str().unwrap()],
+        )?
+    };
+
+    log.fix_ownership(vundle_dir.to_str().unwrap_or(""));
+
+    let installed = vundle_dir.exists();
+    log.finish(installed && status.success());
 
     if !status.success() {
         anyhow::bail!("Vundle 安装失败");
     }
-
     Ok(())
 }
 
@@ -96,7 +98,6 @@ pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
     content.push_str("\ncall vundle#end()\n");
     content.push_str("filetype plugin indent on\n\n");
 
-    // Basic settings
     content.push_str("syntax on\n");
     content.push_str("set number\n");
     content.push_str("set relativenumber\n");
@@ -113,25 +114,18 @@ pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
     content.push_str("set termencoding=utf-8\n");
     content.push_str("set backspace=indent,eol,start\n");
 
-    // NERDTree config
     if selected_plugins.contains(&0) {
         content.push_str("\n\" NERDTree\n");
         content.push_str("nnoremap <C-n> :NERDTreeToggle<CR>\n");
     }
-
-    // vim-airline
     if selected_plugins.contains(&1) {
         content.push_str("\n\" vim-airline\n");
         content.push_str("let g:airline_powerline_fonts = 1\n");
     }
-
-    // ctrlp
     if selected_plugins.contains(&9) {
         content.push_str("\n\" CtrlP\n");
         content.push_str("let g:ctrlp_map = '<c-p>'\n");
     }
-
-    // easymotion
     if selected_plugins.contains(&8) {
         content.push_str("\n\" vim-easymotion\n");
         content.push_str("let g:EasyMotion_smartcase = 1\n");
@@ -143,12 +137,20 @@ pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn install_plugin_bundle() -> anyhow::Result<()> {
-    let status = Command::new("vim")
-        .args(["+PluginInstall", "+qall"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    crate::utils::ensure_command("vim")?;
+
+    let mut log = DownloadLogger::new("vim-plugins-install.log")?;
+
+    log.check_network("https://github.com")?;
+
+    log.log("Running vim +PluginInstall +qall")?;
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("PluginInstall", &sudo_user, "vim", &["+PluginInstall", "+qall"])?
+    } else {
+        log.run_download("PluginInstall", "vim", &["+PluginInstall", "+qall"])?
+    };
+
+    log.finish(status.success());
 
     if !status.success() {
         anyhow::bail!("Vim 插件安装失败");

@@ -1,18 +1,6 @@
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-
-fn get_real_home() -> anyhow::Result<PathBuf> {
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        let output = Command::new("getent")
-            .args(["passwd", &sudo_user])
-            .output()?;
-        let line = String::from_utf8_lossy(&output.stdout);
-        if let Some(home) = line.split(':').nth(5) {
-            return Ok(PathBuf::from(home.trim()));
-        }
-    }
-    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
-}
+use std::process::Command;
+use crate::utils::{get_real_home, DownloadLogger};
 
 pub fn is_nvm_installed() -> bool {
     nvm_dir().join("nvm.sh").exists()
@@ -25,54 +13,86 @@ fn nvm_dir() -> PathBuf {
 }
 
 pub fn install_nvm() -> anyhow::Result<()> {
-    // 确保依赖命令存在
     crate::utils::ensure_command("curl")?;
-    
-    let nvm_dir = nvm_dir();
-    if nvm_dir.join("nvm.sh").exists() {
+
+    let _home = get_real_home()?;
+    let nvm_path = nvm_dir();
+
+    let mut log = DownloadLogger::new("nvm-install.log")?;
+    log.log(&format!("NVM dir: {:?}", nvm_path))?;
+
+    if nvm_path.join("nvm.sh").exists() {
+        log.log("NVM already exists, skipping")?;
+        log.finish(true);
         return Ok(());
     }
 
-    // Use the official install script
-    let status = Command::new("bash")
-        .arg("-c")
-        .arg("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash")
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    let install_url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh";
+    log.check_network("https://github.com/nvm-sh/nvm")?;
+
+    // 下载安装脚本
+    let tmp_script = "/tmp/linux-init-nvm-install.sh";
+    let status = log.run_download(
+        "Download NVM install script",
+        "curl",
+        &["-fSL", "--max-time", "60", "-o", tmp_script, install_url],
+    )?;
 
     if !status.success() {
-        anyhow::bail!("nvm 安装脚本执行失败");
+        let code = status.code().unwrap_or(-1);
+        if code == 28 {
+            anyhow::bail!("NVM 下载超时（60秒），请检查网络连接");
+        }
+        anyhow::bail!("NVM 安装脚本下载失败 (exit code: {})", code);
     }
 
+    // 执行安装
+    let install_status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("Install NVM", &sudo_user, "bash", &[tmp_script])?
+    } else {
+        log.run_download("Install NVM", "bash", &[tmp_script])?
+    };
+
+    let _ = std::fs::remove_file(tmp_script);
+    log.log("Cleaned up temp script")?;
+
+    log.fix_ownership(nvm_path.to_str().unwrap_or(""));
+
+    let installed = nvm_path.join("nvm.sh").exists();
+    log.finish(installed && install_status.success());
+
+    if !install_status.success() || !installed {
+        anyhow::bail!("NVM 安装失败");
+    }
     Ok(())
 }
 
-/// Load nvm in a subshell and install node LTS
 pub fn install_node_lts() -> anyhow::Result<()> {
     let nvm_sh = nvm_dir().join("nvm.sh");
     if !nvm_sh.exists() {
         anyhow::bail!("nvm 未安装");
     }
 
+    let mut log = DownloadLogger::new("node-lts-install.log")?;
+
     let script = format!(
         "source '{}' && nvm install --lts && nvm alias default lts/*",
         nvm_sh.display()
     );
 
-    let status = Command::new("bash")
-        .arg("-c")
-        .arg(&script)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    log.log("Installing Node.js LTS")?;
+
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("nvm install --lts", &sudo_user, "bash", &["-c", &script])?
+    } else {
+        log.run_download("nvm install --lts", "bash", &["-c", &script])?
+    };
+
+    log.finish(status.success());
 
     if !status.success() {
         anyhow::bail!("Node.js LTS 安装失败");
     }
-
     Ok(())
 }
 
@@ -98,8 +118,6 @@ pub fn installed_node_version() -> Option<String> {
 }
 
 pub fn ensure_shell_integration() -> anyhow::Result<()> {
-    // nvm install script usually adds this to .bashrc/.zshrc,
-    // but let's make sure it's there for the active shell
     let home = get_real_home()?;
     let nvm_sh = nvm_dir().join("nvm.sh");
 
@@ -113,7 +131,6 @@ export NVM_DIR="$HOME/.nvm"
         nvm_sh.display()
     );
 
-    // Check and update both .bashrc and .zshrc if they exist
     for rc in [".bashrc", ".zshrc"] {
         let path = home.join(rc);
         if !path.exists() {

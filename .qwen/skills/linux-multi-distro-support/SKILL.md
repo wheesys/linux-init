@@ -399,3 +399,30 @@ Command::new("curl")
     .stderr(Stdio::inherit())
     .status()?;
 ```
+
+**Gotcha: Network detection with raw.githubusercontent.com**
+
+When checking network connectivity by requesting `raw.githubusercontent.com`, HEAD requests (`--head`) return HTTP 301 redirects, which can cause false negatives:
+
+```rust
+// WRONG — returns 301 redirect, may fail network check
+let ping = Command::new("curl")
+    .args(["-sSL", "--max-time", "10", "--head", "https://raw.githubusercontent.com"])
+    .output();
+
+// CORRECT — request an actual file that returns 200
+let ping = Command::new("curl")
+    .args(["-sSL", "--max-time", "10", "-o", "/dev/null", 
+           "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
+    .output();
+```
+
+Better yet, check a stable endpoint that's guaranteed to return 200:
+```rust
+// Even better — check GitHub API or a known-stable resource
+let ping = Command::new("curl")
+    .args(["-sSL", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}",
+           "https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh"])
+    .output();
+// This returns 200 and is more reliable than raw.githubusercontent.com HEAD requests
+```

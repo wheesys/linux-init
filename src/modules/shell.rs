@@ -1,169 +1,69 @@
 use std::fs;
 use std::process::{Command, Stdio};
+use crate::utils::{get_real_home, DownloadLogger};
 
 pub fn install_zsh() -> anyhow::Result<()> {
     crate::distro::install_packages(&["zsh"])
 }
 
 pub fn install_oh_my_zsh() -> anyhow::Result<()> {
-    // 确保依赖命令存在
     crate::utils::ensure_command("curl")?;
     crate::utils::ensure_command("git")?;
-    
+
     let home = get_real_home()?;
     let omz_dir = home.join(".oh-my-zsh");
-    
-    // 创建日志目录
-    let log_dir = home.join(".config").join("linux-init");
-    std::fs::create_dir_all(&log_dir)?;
-    let log_path = log_dir.join("omz-install.log");
-    
-    let mut log = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)?;
 
-    use std::io::Write;
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    writeln!(log, "\n=== OMZ Install Start: {} ===", timestamp)?;
-    writeln!(log, "Real home: {:?}", home)?;
-    writeln!(log, "OMZ dir: {:?}", omz_dir)?;
+    let mut log = DownloadLogger::new("omz-install.log")?;
+    log.log(&format!("Real home: {:?}", home))?;
+    log.log(&format!("OMZ dir: {:?}", omz_dir))?;
 
     if omz_dir.exists() {
-        writeln!(log, "OMZ already exists, skipping")?;
+        log.log("OMZ already exists, skipping")?;
+        log.finish(true);
         return Ok(());
     }
 
-    // 下载脚本 - 使用 inherit 让用户看到进度
+    // 下载安装脚本
     let tmp_script = "/tmp/linux-init-omz-install.sh";
-    writeln!(log, "Downloading install script to {}...", tmp_script)?;
-    log.flush()?;
-    
-    // 先检测网络连通性
-    writeln!(log, "Checking network connectivity...")?;
-    log.flush()?;
+    log.check_network("https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh")?;
 
-    let ping = Command::new("curl")
-        .args(["-sSL", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", 
-               "https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh"])
-        .output();
+    let status = log.run_download(
+        "Download OMZ install script",
+        "curl",
+        &["-fSL", "--max-time", "60", "-o", tmp_script,
+            "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"],
+    )?;
 
-    match ping {
-        Ok(output) if output.status.success() => {
-            let status_code = String::from_utf8_lossy(&output.stdout);
-            writeln!(log, "Network check passed with HTTP status: {}", status_code)?;
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            writeln!(log, "Network check failed with exit code {:?}, stdout: {}, stderr: {}", 
-                     output.status.code(), stdout, stderr)?;
-            anyhow::bail!("无法连接到 github.com (exit code: {:?})，请检查网络连接", output.status.code());
-        }
-        Err(e) => {
-            writeln!(log, "Network check failed to execute: {}", e)?;
-            anyhow::bail!("无法执行网络检测: {}", e);
-        }
-    }
-    log.flush()?;
-    
-    let download = Command::new("curl")
-        .args(["-fSL", "--max-time", "60", "-o", tmp_script,
-            "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
-
-    writeln!(log, "Download exit code: {:?}", download.code())?;
-    if !download.success() {
-        let code = download.code().unwrap_or(-1);
-        writeln!(log, "Download failed with code {}", code)?;
+    if !status.success() {
+        let code = status.code().unwrap_or(-1);
         if code == 28 {
             anyhow::bail!("下载超时（60秒），请检查网络连接");
         }
         anyhow::bail!("Oh My Zsh 安装脚本下载失败 (exit code: {})", code);
     }
 
-    writeln!(log, "Download successful, script size: {} bytes", 
-        std::fs::metadata(tmp_script).map(|m| m.len()).unwrap_or(0))?;
-    log.flush()?;
-
-    // 执行安装 - 使用 inherit 让用户看到进度
-    writeln!(log, "Checking SUDO_USER: {:?}", std::env::var("SUDO_USER"))?;
-    log.flush()?;
-    
-    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        writeln!(log, "Running as user: {}", sudo_user)?;
-        let cmd = format!("sudo -u {} sh {} \"\" --unattended", sudo_user, tmp_script);
-        writeln!(log, "Command: {}", cmd)?;
-        log.flush()?;
-        
-        let status = Command::new("sudo")
-            .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()?;
-        
-        writeln!(log, "Install exit code: {:?}", status.code())?;
-        status
+    // 执行安装
+    let install_status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("Install OMZ", &sudo_user, "sh", &[tmp_script, "", "--unattended"])?
     } else {
-        writeln!(log, "Running as current user (no SUDO_USER)")?;
-        log.flush()?;
-        
-        let status = Command::new("sh")
-            .args([tmp_script, "", "--unattended"])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()?;
-        
-        writeln!(log, "Install exit code: {:?}", status.code())?;
-        status
+        log.run_download("Install OMZ", "sh", &[tmp_script, "", "--unattended"])?
     };
-    log.flush()?;
 
-    // 清理
-    let _ = std::fs::remove_file(tmp_script);
-    writeln!(log, "Cleaned up temp script")?;
+    // 清理临时文件
+    let _ = fs::remove_file(tmp_script);
+    log.log("Cleaned up temp script")?;
 
     // 修复权限
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        writeln!(log, "Fixing ownership for {}...", sudo_user)?;
-        let chown_status = Command::new("chown")
-            .args(["-R", &format!("{}:{}", sudo_user, sudo_user), 
-                omz_dir.to_str().unwrap_or("")])
-            .status()?;
-        writeln!(log, "Chown exit code: {:?}", chown_status.code())?;
-    }
+    log.fix_ownership(omz_dir.to_str().unwrap_or(""));
 
-    // 检查安装结果
     let installed = omz_dir.exists();
-    writeln!(log, "OMZ dir exists after install: {}", installed)?;
-    writeln!(log, "=== OMZ Install End ===\n")?;
+    log.log(&format!("OMZ dir exists: {}", installed))?;
+    log.finish(installed && install_status.success());
 
-    if !status.success() || !installed {
-        anyhow::bail!("Oh My Zsh 安装失败。查看日志: {:?}", log_path);
+    if !install_status.success() || !installed {
+        anyhow::bail!("Oh My Zsh 安装失败");
     }
-    
     Ok(())
-}
-
-fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        let output = Command::new("getent")
-            .args(["passwd", &sudo_user])
-            .output()?;
-        let line = String::from_utf8_lossy(&output.stdout);
-        if let Some(home) = line.split(':').nth(5) {
-            return Ok(std::path::PathBuf::from(home.trim()));
-        }
-    }
-    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
 }
 
 pub fn set_theme(theme: &str) -> anyhow::Result<()> {
@@ -221,44 +121,54 @@ pub fn set_plugins(plugins: &[String]) -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
+    crate::utils::ensure_command("git")?;
+
     let home = get_real_home()?;
     let custom_plugins = home.join(".oh-my-zsh/custom/plugins");
-
     let plugin_dir = custom_plugins.join(name);
+
+    let mut log = DownloadLogger::new(&format!("plugin-{}.log", name))?;
+    log.log(&format!("Plugin: {}, Dir: {:?}", name, plugin_dir))?;
+
     if plugin_dir.exists() {
+        log.log("Plugin already exists, skipping")?;
+        log.finish(true);
         return Ok(());
     }
 
     let repo_url = match name {
-        "zsh-autosuggestions" => {
-            "https://github.com/zsh-users/zsh-autosuggestions.git"
-        }
-        "zsh-syntax-highlighting" => {
-            "https://github.com/zsh-users/zsh-syntax-highlighting.git"
-        }
-        "zsh-completions" => {
-            "https://github.com/zsh-users/zsh-completions.git"
-        }
+        "zsh-autosuggestions" => "https://github.com/zsh-users/zsh-autosuggestions.git",
+        "zsh-syntax-highlighting" => "https://github.com/zsh-users/zsh-syntax-highlighting.git",
+        "zsh-completions" => "https://github.com/zsh-users/zsh-completions.git",
         "fzf" => "https://github.com/chitoku-k/fzf-zsh-completions.git",
-        "you-should-use" => {
-            "https://github.com/MichaelAqworka/zsh-you-should-use.git"
+        "you-should-use" => "https://github.com/MichaelAqworka/zsh-you-should-use.git",
+        _ => {
+            log.log(&format!("Unknown plugin: {}", name))?;
+            return Ok(());
         }
-        _ => return Ok(()),
     };
 
-    let status = Command::new("git")
-        .args(["clone", repo_url, plugin_dir.to_str().unwrap()])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    log.check_network(repo_url)?;
 
-    // Fix ownership if running with sudo
-    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        let _ = Command::new("chown")
-            .args(["-R", &format!("{}:{}", sudo_user, sudo_user), plugin_dir.to_str().unwrap_or("")])
-            .status();
-    }
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user(
+            &format!("Clone {}", name),
+            &sudo_user,
+            "git",
+            &["clone", repo_url, plugin_dir.to_str().unwrap()],
+        )?
+    } else {
+        log.run_download(
+            &format!("Clone {}", name),
+            "git",
+            &["clone", repo_url, plugin_dir.to_str().unwrap()],
+        )?
+    };
+
+    log.fix_ownership(plugin_dir.to_str().unwrap_or(""));
+
+    let installed = plugin_dir.exists();
+    log.finish(installed && status.success());
 
     if !status.success() {
         anyhow::bail!("插件 {} 下载失败", name);
