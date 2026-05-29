@@ -518,6 +518,70 @@ fn refresh_state(app: &mut App) {
 
 Call `refresh_state` after each action and on app startup to keep config in sync with reality.
 
+### Service Status Detection (Beyond Package Installation)
+
+Package installation is only one part of service setup. You must also detect service runtime status:
+
+```rust
+// Package installed check
+app.docker_installed = distro::is_tool_installed("docker");
+
+// Service running check (systemctl)
+app.docker_service_running = Command::new("systemctl")
+    .args(["is-active", "--quiet", "docker"])
+    .status()
+    .map(|s| s.success())
+    .unwrap_or(false);
+
+// User configuration check (e.g., user in docker group)
+app.docker_user_configured = Command::new("groups")
+    .arg(std::env::var("USER").unwrap_or_default())
+    .output()
+    .map(|o| String::from_utf8_lossy(&o.stdout).contains("docker"))
+    .unwrap_or(false);
+```
+
+Show all three statuses in the menu:
+```rust
+let items = vec![
+    ("Install Docker", app.docker_installed),
+    ("Configure user to docker group", app.docker_user_configured),
+    ("Start Docker service", app.docker_service_running),
+];
+```
+
+### Track Independent Operations Separately
+
+When you have multiple independent operations that don't depend on each other, track them with separate boolean fields, not a single combined status:
+
+```rust
+// WRONG — single field can't distinguish between ed25519 and RSA
+pub struct App {
+    pub ssh_key_exists: bool,  // Ambiguous: which key type?
+}
+
+// CORRECT — separate fields for independent operations
+pub struct App {
+    pub ed25519_exists: bool,  // Tracks ~/.ssh/id_ed25519.pub
+    pub rsa_exists: bool,       // Tracks ~/.ssh/id_rsa.pub
+}
+
+// Detection
+app.ed25519_exists = home.join(".ssh/id_ed25519.pub").exists();
+app.rsa_exists = home.join(".ssh/id_rsa.pub").exists();
+
+// Menu display
+let items = vec![
+    ("Generate Ed25519 key", app.ed25519_exists),
+    ("Generate RSA key", app.rsa_exists),
+];
+```
+
+This principle applies to any scenario where operations are independent:
+- Different key types (ed25519 vs RSA)
+- Different plugins (each plugin has its own status)
+- Different services (docker vs docker-compose)
+
 ### Show Completion Status in Menu
 ```rust
 fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
@@ -757,6 +821,65 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
 - Temp file is cleaned up after execution
 - `sudo -u $SUDO_USER` ensures oh-my-zsh installs to real user's home, not `/root/`
 - `chown -R` fixes ownership when files are created during sudo execution
+
+### Third-Party Plugin Cloning (CRITICAL)
+
+Oh-my-zsh third-party plugins (like zsh-autosuggestions, zsh-syntax-highlighting) MUST be cloned to `~/.oh-my-zsh/custom/plugins/`, not just added to .zshrc:
+
+```rust
+pub fn clone_third_party_plugins(selected_plugins: &[String]) -> anyhow::Result<()> {
+    let home = get_real_home()?;
+    let custom_plugins_dir = home.join(".oh-my-zsh/custom/plugins");
+    
+    let plugin_repos = [
+        ("zsh-autosuggestions", "https://github.com/zsh-users/zsh-autosuggestions"),
+        ("zsh-syntax-highlighting", "https://github.com/zsh-users/zsh-syntax-highlighting"),
+        ("zsh-completions", "https://github.com/zsh-users/zsh-completions"),
+    ];
+    
+    for plugin_name in selected_plugins {
+        if let Some((name, repo_url)) = plugin_repos.iter().find(|(n, _)| *n == plugin_name.as_str()) {
+            let plugin_dir = custom_plugins_dir.join(name);
+            if !plugin_dir.exists() {
+                let status = Command::new("git")
+                    .args(["clone", "--depth=1", repo_url, plugin_dir.to_str().unwrap()])
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .status()?;
+                
+                if !status.success() {
+                    eprintln!("Failed to clone {}", name);
+                }
+                
+                // Fix ownership under sudo
+                if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                    let _ = Command::new("chown")
+                        .args(["-R", &format!("{}:{}", sudo_user, sudo_user), 
+                               plugin_dir.to_str().unwrap()])
+                        .status();
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+**Common mistake**: Only writing plugin names to .zshrc without cloning the repositories. This causes "plugin not found" errors when zsh starts:
+
+```
+[oh-my-zsh] plugin 'zsh-autosuggestions' not found
+[oh-my-zsh] plugin 'zsh-syntax-highlighting' not found
+```
+
+**Correct workflow**:
+1. Clone each third-party plugin to `~/.oh-my-zsh/custom/plugins/<plugin-name>`
+2. Write plugin names to .zshrc `plugins=(...)` line
+3. Fix ownership if running under sudo
+
+Use `--depth=1` for shallow clones to save bandwidth and disk space.
 
 ## Status Bar Rendering
 

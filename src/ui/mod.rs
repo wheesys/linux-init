@@ -1141,7 +1141,11 @@ fn handle_ssh(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
     let max = i18n::ssh_menu(lang).len();
     match key.code {
         KeyCode::Esc | KeyCode::Backspace => {
-            app.last_pubkey.clear();
+            // 如果公钥弹窗正在显示，先关闭弹窗，不返回上级
+            if !app.last_pubkey.is_empty() {
+                app.last_pubkey.clear();
+                return Ok(None);
+            }
             app.page = Page::MainMenu;
             app.ssh_index = 0;
         }

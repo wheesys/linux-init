@@ -109,6 +109,31 @@ Command::new("dpkg").arg("-s").arg(pkg).output()
     .map(|o| o.status.success()).unwrap_or(false)
 ```
 
+### CRITICAL: Use Correct Package Name for Detection
+
+When checking if a package is installed, you MUST use the correct package name for the current distro family. This is a common source of bugs:
+
+```rust
+// WRONG — always fails on Debian because package is "docker.io", not "docker"
+let docker_installed = distro::is_package_installed("docker");
+
+// CORRECT — use the package name mapping
+pub fn is_tool_installed(tool: &str) -> bool {
+    package_name(tool)
+        .map(|pkg| is_package_installed(pkg))
+        .unwrap_or(false)
+}
+
+let docker_installed = distro::is_tool_installed("docker");
+```
+
+The `is_tool_installed()` helper automatically maps tool names to the correct package names:
+- `docker` → `docker.io` (Debian) or `docker` (Arch)
+- `docker-compose` → `docker-compose-v2` (Debian) or `docker-compose` (Arch)
+- `fd` → `fd-find` (Debian) or `fd` (Arch)
+
+Without this mapping, detection will always fail on distros where the package name differs from the tool name.
+
 ## Writing to /etc/ files (e.g., locale.gen)
 
 Files under `/etc/` are root-owned. Use `sudo tee` pattern:
@@ -181,6 +206,50 @@ Command::new("sudo")
     .args(["systemctl", "enable", "--now", "sshd"])
     .status()?;
 ```
+
+### Auto-Start Services After Installation
+
+When installing services (Docker, SSH server, etc.), automatically enable and start them to improve user experience:
+
+```rust
+pub fn install_docker() -> anyhow::Result<()> {
+    let family = distro::detect().family();
+    match family {
+        DistroFamily::Arch => {
+            distro::install_packages(&["docker"])?;
+        }
+        DistroFamily::Debian => {
+            distro::install_packages(&["docker.io"])?;
+        }
+        _ => anyhow::bail!("不支持的发行版"),
+    }
+    
+    // Auto-enable and start the service
+    start_docker_service()?;
+    
+    Ok(())
+}
+
+pub fn start_docker_service() -> anyhow::Result<()> {
+    let status = Command::new("sudo")
+        .args(["systemctl", "enable", "--now", "docker"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("systemctl 命令失败");
+    }
+    Ok(())
+}
+```
+
+**Why auto-start?**
+- Users expect services to be ready immediately after installation
+- Reduces manual steps in the setup workflow
+- `systemctl enable --now` both enables (boot persistence) and starts (immediate) in one command
+
+**Applies to**: Docker, SSH server, any systemd-managed service.
 
 ## Vim + Vundle Plugin Manager
 
