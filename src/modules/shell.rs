@@ -143,6 +143,32 @@ pub fn set_plugins(plugins: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 批量安装选中的第三方插件
+pub fn install_selected_plugins(selected: &[String]) -> anyhow::Result<()> {
+    let third_party = [
+        "zsh-autosuggestions",
+        "zsh-syntax-highlighting",
+        "zsh-completions",
+        "fzf",
+        "you-should-use",
+    ];
+
+    for name in selected {
+        if third_party.contains(&name.as_str()) {
+            install_third_party_plugin(name)?;
+        }
+    }
+
+    // fzf 插件需要 fzf 二进制
+    if selected.contains(&"fzf".to_string()) {
+        if !crate::utils::command_exists("fzf") {
+            let _ = crate::distro::install_packages(&["fzf"]);
+        }
+    }
+
+    Ok(())
+}
+
 #[allow(dead_code)]
 pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
     crate::utils::ensure_command("git")?;

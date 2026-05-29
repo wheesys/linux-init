@@ -776,7 +776,7 @@ fn handle_key(
         Page::MainMenu => handle_main_menu(app, key),
         Page::Shell => handle_shell(terminal, app, key),
         Page::ShellZshTheme => handle_theme(app, key),
-        Page::ShellZshPlugins => handle_plugins(app, key),
+        Page::ShellZshPlugins => handle_plugins(terminal, app, key),
         Page::Docker => handle_docker(app, key),
         Page::Ssh => handle_ssh(app, key),
         Page::SshServer => handle_ssh_server(app, key),
@@ -1004,11 +1004,19 @@ fn handle_theme(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> 
     Ok(None)
 }
 
-fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+fn handle_plugins(terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
     let lang = app.lang;
     match key.code {
         KeyCode::Esc | KeyCode::Backspace => {
             if !app.selected_plugins.is_empty() {
+                // 先下载第三方插件
+                let result = run_in_terminal(terminal, || {
+                    crate::modules::shell::install_selected_plugins(&app.selected_plugins)
+                });
+                if let Err(e) = result {
+                    app.status_msg = i18n::msg_fail(lang, "download plugins", &e.to_string());
+                }
+
                 match crate::modules::shell::set_plugins(&app.selected_plugins) {
                     Ok(()) => {
                         app.status_msg = match lang {
@@ -1040,6 +1048,14 @@ fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>
         }
         KeyCode::Enter => {
             if !app.selected_plugins.is_empty() {
+                // 先下载第三方插件
+                let result = run_in_terminal(terminal, || {
+                    crate::modules::shell::install_selected_plugins(&app.selected_plugins)
+                });
+                if let Err(e) = result {
+                    app.status_msg = i18n::msg_fail(lang, "download plugins", &e.to_string());
+                }
+
                 match crate::modules::shell::set_plugins(&app.selected_plugins) {
                     Ok(()) => {
                         app.status_msg = match lang {
