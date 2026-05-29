@@ -33,23 +33,37 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 下载脚本 - 使用 inherit 让用户看到进度，加超时
+    // 下载脚本 - 使用 inherit 让用户看到进度
     let tmp_script = "/tmp/linux-init-omz-install.sh";
     writeln!(log, "Downloading install script to {}...", tmp_script)?;
     log.flush()?;
     
-    // 先检测网络连通性
-    let ping = Command::new("timeout")
-        .args(["5", "curl", "-sSL", "--head", "https://raw.githubusercontent.com"])
+    // 先检测网络连通性 - 简单直接
+    writeln!(log, "Checking network connectivity...")?;
+    log.flush()?;
+    
+    let ping = Command::new("curl")
+        .args(["-sSL", "--max-time", "10", "--head", "https://raw.githubusercontent.com"])
         .output();
     
-    if ping.is_err() || !ping.as_ref().unwrap().status.success() {
-        writeln!(log, "Network check failed")?;
-        anyhow::bail!("无法连接到 github.com，请检查网络连接");
+    match ping {
+        Ok(output) if output.status.success() => {
+            writeln!(log, "Network check passed")?;
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            writeln!(log, "Network check failed with exit code {:?}: {}", output.status.code(), stderr)?;
+            anyhow::bail!("无法连接到 github.com (exit code: {:?})，请检查网络连接", output.status.code());
+        }
+        Err(e) => {
+            writeln!(log, "Network check failed to execute: {}", e)?;
+            anyhow::bail!("无法执行网络检测: {}", e);
+        }
     }
+    log.flush()?;
     
-    let download = Command::new("timeout")
-        .args(["60", "curl", "-fsSL", "-o", tmp_script,
+    let download = Command::new("curl")
+        .args(["-fSL", "--max-time", "60", "-o", tmp_script,
             "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -60,7 +74,7 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
     if !download.success() {
         let code = download.code().unwrap_or(-1);
         writeln!(log, "Download failed with code {}", code)?;
-        if code == 124 {
+        if code == 28 {
             anyhow::bail!("下载超时（60秒），请检查网络连接");
         }
         anyhow::bail!("Oh My Zsh 安装脚本下载失败 (exit code: {})", code);
