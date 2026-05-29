@@ -225,6 +225,8 @@ impl App {
         let omz_installed = home.join(".oh-my-zsh").exists();
         let docker_installed = crate::distro::is_package_installed("docker");
         let compose_installed = crate::distro::is_package_installed("docker-compose");
+        let docker_user_configured = crate::modules::docker::is_user_in_docker_group();
+        let docker_service_running = crate::modules::docker::is_docker_running();
         let ssh_key_exists = home.join(".ssh/id_ed25519.pub").exists()
             || home.join(".ssh/id_rsa.pub").exists();
         let vim_installed = crate::distro::is_package_installed("vim");
@@ -287,8 +289,8 @@ impl App {
             docker_index: 0,
             docker_installed,
             compose_installed,
-            docker_user_configured: false,
-            docker_service_running: false,
+            docker_user_configured,
+            docker_service_running,
 
             ssh_index: 0,
             ssh_key_exists,
