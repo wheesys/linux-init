@@ -224,8 +224,8 @@ impl App {
         let home = Self::get_real_home();
         let zsh_installed = crate::distro::is_package_installed("zsh");
         let omz_installed = home.join(".oh-my-zsh").exists();
-        let docker_installed = crate::distro::is_package_installed("docker");
-        let compose_installed = crate::distro::is_package_installed("docker-compose");
+        let docker_installed = crate::distro::is_tool_installed("docker");
+        let compose_installed = crate::distro::is_tool_installed("docker-compose");
         let docker_user_configured = crate::modules::docker::is_user_in_docker_group();
         let docker_service_running = crate::modules::docker::is_docker_running();
         let ed25519_exists = home.join(".ssh/id_ed25519.pub").exists();

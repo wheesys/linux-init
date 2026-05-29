@@ -50,8 +50,8 @@ fn refresh_state(app: &mut App) {
     app.zsh_installed = distro::is_package_installed("zsh");
     let home = utils::get_real_home().unwrap_or_else(|_| dirs::home_dir().unwrap_or_default());
     app.omz_installed = home.join(".oh-my-zsh").exists();
-    app.docker_installed = distro::is_package_installed("docker");
-    app.compose_installed = distro::is_package_installed("docker-compose");
+    app.docker_installed = distro::is_tool_installed("docker");
+    app.compose_installed = distro::is_tool_installed("docker-compose");
     app.docker_user_configured = modules::docker::is_user_in_docker_group();
     app.docker_service_running = modules::docker::is_docker_running();
     app.ed25519_exists = modules::ssh::has_ed25519_key();

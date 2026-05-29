@@ -57,6 +57,12 @@ pub fn install_packages(packages: &[&str]) -> anyhow::Result<()> {
     }
 }
 
+pub fn is_tool_installed(tool: &str) -> bool {
+    package_name(tool)
+        .map(|pkg| is_package_installed(pkg))
+        .unwrap_or(false)
+}
+
 pub fn is_package_installed(package: &str) -> bool {
     let distro = detect();
     match distro.family() {

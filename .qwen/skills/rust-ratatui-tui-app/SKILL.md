@@ -1226,3 +1226,206 @@ log.check_network("https://github.com/VundleVim/Vundle.vim.git")?;  // for git c
        Ok(after_msg)
    }))
    ```
+
+## Config Write + Resource Side-Effect Synchronization
+
+When writing configuration that references external resources, you MUST ensure both the config AND the resources are created. A common pitfall is writing config (e.g., `.zshrc` plugin list) without actually downloading the referenced resources (plugin files).
+
+**Example pitfall:**
+```rust
+// WRONG — writes .zshrc but plugins don't exist on disk
+fn handle_plugins(app: &mut App, key: KeyEvent) {
+    // ... user selects plugins ...
+    crate::modules::shell::set_plugins(&app.selected_plugins)?;  // writes .zshrc
+    app.page = Page::Shell;
+}
+```
+
+User's `.zshrc` now has `plugins=(git zsh-autosuggestions zsh-syntax-highlighting)` but the third-party plugin directories don't exist, causing errors like:
+```
+[oh-my-zsh] plugin 'zsh-autosuggestions' not found
+```
+
+**Correct pattern:**
+```rust
+// CORRECT — download resources BEFORE writing config
+fn handle_plugins(terminal: &mut Term, app: &mut App, key: KeyEvent) {
+    // ... user selects plugins ...
+    
+    // Step 1: Download third-party plugins (shows git clone output to user)
+    let result = run_in_terminal(terminal, || {
+        crate::modules::shell::install_selected_plugins(&app.selected_plugins)
+    });
+    if let Err(e) = result {
+        app.status_msg = format!("❌ Download failed: {}", e);
+    }
+    
+    // Step 2: Write config (now references existing resources)
+    match crate::modules::shell::set_plugins(&app.selected_plugins) {
+        Ok(()) => { app.status_msg = "✅ Plugins configured".into(); }
+        Err(e) => { app.status_msg = format!("❌ Config failed: {}", e); }
+    }
+    
+    app.page = Page::Shell;
+}
+```
+
+**Implementation:**
+```rust
+pub fn install_selected_plugins(selected: &[String]) -> anyhow::Result<()> {
+    let third_party = [
+        "zsh-autosuggestions",
+        "zsh-syntax-highlighting",
+        "zsh-completions",
+        "fzf",
+        "you-should-use",
+    ];
+
+    for name in selected {
+        if third_party.contains(&name.as_str()) {
+            install_third_party_plugin(name)?;  // git clone to ~/.oh-my-zsh/custom/plugins/
+        }
+    }
+
+    // Special case: fzf plugin needs fzf binary
+    if selected.contains(&"fzf".to_string()) {
+        if !crate::utils::command_exists("fzf") {
+            let _ = crate::distro::install_packages(&["fzf"]);
+        }
+    }
+
+    Ok(())
+}
+```
+
+**Key principle:** Configuration that references external resources (files, packages, services) must ensure those resources exist. Always pair config writes with resource provisioning in the same operation.
+
+## Complete Status Initialization
+
+When creating an `App` struct, EVERY status field must be initialized by detecting actual system state, not hardcoded defaults. Forgetting to detect even one field causes menu checkmarks to not appear even when the resource is installed.
+
+**Example pitfall:**
+```rust
+// WRONG — some fields hardcoded to false, won't show checkmarks
+pub fn new(distro: Distro) -> Self {
+    let home = Self::get_real_home();
+    let docker_installed = crate::distro::is_package_installed("docker");
+    let compose_installed = crate::distro::is_package_installed("docker-compose");
+    
+    Self {
+        // ...
+        docker_installed,
+        compose_installed,
+        docker_user_configured: false,      // WRONG — hardcoded
+        docker_service_running: false,      // WRONG — hardcoded
+        // ...
+    }
+}
+```
+
+User has already configured Docker, but menu doesn't show checkmarks because those two fields are always `false`.
+
+**Correct pattern:**
+```rust
+// CORRECT — detect ALL status fields from actual system state
+pub fn new(distro: Distro) -> Self {
+    let home = Self::get_real_home();
+    let docker_installed = crate::distro::is_package_installed("docker");
+    let compose_installed = crate::distro::is_package_installed("docker-compose");
+    let docker_user_configured = crate::modules::docker::is_user_in_docker_group();
+    let docker_service_running = crate::modules::docker::is_docker_running();
+    
+    Self {
+        // ...
+        docker_installed,
+        compose_installed,
+        docker_user_configured,      // Detected
+        docker_service_running,      // Detected
+        // ...
+    }
+}
+```
+
+**Same pattern in `refresh_state`:**
+```rust
+fn refresh_state(app: &mut App) {
+    app.docker_installed = distro::is_package_installed("docker");
+    app.compose_installed = distro::is_package_installed("docker-compose");
+    app.docker_user_configured = modules::docker::is_user_in_docker_group();
+    app.docker_service_running = modules::docker::is_docker_running();
+    // ... detect ALL fields, not just some
+}
+```
+
+**Key principle:** If a status field affects UI display (checkmarks, skip logic), it must be initialized from actual system state in BOTH `App::new()` and `refresh_state()`. Never hardcode status fields to default values.
+
+## Separate Status Tracking for Separate Resources
+
+When a menu offers multiple independent operations (e.g., "Generate Ed25519 key" and "Generate RSA key"), each needs its own status field. Using a single shared flag causes incorrect UI display.
+
+**Example pitfall:**
+```rust
+// WRONG — single flag for both key types
+pub struct App {
+    pub ssh_key_exists: bool,  // True if EITHER key exists
+}
+
+// Rendering:
+let statuses = vec![app.ssh_key_exists, app.ssh_key_exists, false];
+//                   ↑ Ed25519           ↑ RSA
+// If user has only Ed25519, RSA menu also shows ✓ (incorrect)
+```
+
+**Correct pattern:**
+```rust
+// CORRECT — separate flag per resource
+pub struct App {
+    pub ed25519_exists: bool,
+    pub rsa_exists: bool,
+}
+
+// Initialization:
+let ed25519_exists = home.join(".ssh/id_ed25519.pub").exists();
+let rsa_exists = home.join(".ssh/id_rsa.pub").exists();
+
+// Rendering:
+let statuses = vec![app.ed25519_exists, app.rsa_exists, false];
+//                   ↑ Ed25519           ↑ RSA
+// Each shows correct status independently
+
+// Skip logic:
+KeyCode::Enter => {
+    match app.ssh_index {
+        0 => {
+            if app.ed25519_exists {
+                app.status_msg = "✅ Ed25519 key already exists".into();
+                return Ok(None);
+            }
+            // generate Ed25519...
+        }
+        1 => {
+            if app.rsa_exists {
+                app.status_msg = "✅ RSA key already exists".into();
+                return Ok(None);
+            }
+            // generate RSA...
+        }
+        _ => {}
+    }
+}
+```
+
+**Detection functions:**
+```rust
+pub fn has_ed25519_key() -> bool {
+    let home = get_real_home()?;
+    home.join(".ssh/id_ed25519.pub").exists()
+}
+
+pub fn has_rsa_key() -> bool {
+    let home = get_real_home()?;
+    home.join(".ssh/id_rsa.pub").exists()
+}
+```
+
+**Key principle:** Each independent resource or operation needs its own status field. Don't conflate multiple resources into a single boolean — it breaks both UI display and skip logic.
