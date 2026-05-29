@@ -23,23 +23,47 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 下载安装脚本
+    // 下载源列表：GitHub 优先，Gitee 作为镜像
+    let sources = [
+        ("GitHub",
+         "https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh",
+         "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"),
+        ("Gitee",
+         "https://gitee.com/mirrors/oh-my-zsh/blob/master/tools/install.sh",
+         "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"),
+    ];
+
     let tmp_script = "/tmp/linux-init-omz-install.sh";
-    log.check_network("https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh")?;
+    let mut downloaded = false;
 
-    let status = log.run_download(
-        "Download OMZ install script",
-        "curl",
-        &["-fSL", "--max-time", "60", "-o", tmp_script,
-            "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"],
-    )?;
+    for (name, check_url, download_url) in &sources {
+        log.log(&format!("Trying {} mirror...", name))?;
 
-    if !status.success() {
-        let code = status.code().unwrap_or(-1);
-        if code == 28 {
-            anyhow::bail!("下载超时（60秒），请检查网络连接");
+        // 网络检测
+        if log.check_network(check_url).is_err() {
+            log.log(&format!("{} network check failed, trying next...", name))?;
+            continue;
         }
-        anyhow::bail!("Oh My Zsh 安装脚本下载失败 (exit code: {})", code);
+
+        // 下载脚本
+        let status = log.run_download(
+            &format!("Download from {}", name),
+            "curl",
+            &["-fSL", "--max-time", "60", "-o", tmp_script, download_url],
+        )?;
+
+        if status.success() {
+            log.log(&format!("{} download succeeded", name))?;
+            downloaded = true;
+            break;
+        }
+
+        let code = status.code().unwrap_or(-1);
+        log.log(&format!("{} download failed (exit code: {}), trying next...", name, code))?;
+    }
+
+    if !downloaded {
+        anyhow::bail!("所有下载源均失败，请检查网络连接");
     }
 
     // 执行安装
@@ -136,42 +160,70 @@ pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let repo_url = match name {
-        "zsh-autosuggestions" => "https://github.com/zsh-users/zsh-autosuggestions.git",
-        "zsh-syntax-highlighting" => "https://github.com/zsh-users/zsh-syntax-highlighting.git",
-        "zsh-completions" => "https://github.com/zsh-users/zsh-completions.git",
-        "fzf" => "https://github.com/chitoku-k/fzf-zsh-completions.git",
-        "you-should-use" => "https://github.com/MichaelAqworka/zsh-you-should-use.git",
+    let sources: Vec<(&str, &str)> = match name {
+        "zsh-autosuggestions" => vec![
+            ("GitHub", "https://github.com/zsh-users/zsh-autosuggestions.git"),
+            ("Gitee", "https://gitee.com/mirrors/zsh-autosuggestions.git"),
+        ],
+        "zsh-syntax-highlighting" => vec![
+            ("GitHub", "https://github.com/zsh-users/zsh-syntax-highlighting.git"),
+            ("Gitee", "https://gitee.com/mirrors/zsh-syntax-highlighting.git"),
+        ],
+        "zsh-completions" => vec![
+            ("GitHub", "https://github.com/zsh-users/zsh-completions.git"),
+            ("Gitee", "https://gitee.com/mirrors/zsh-completions.git"),
+        ],
+        "fzf" => vec![
+            ("GitHub", "https://github.com/chitoku-k/fzf-zsh-completions.git"),
+        ],
+        "you-should-use" => vec![
+            ("GitHub", "https://github.com/MichaelAqworka/zsh-you-should-use.git"),
+        ],
         _ => {
             log.log(&format!("Unknown plugin: {}", name))?;
             return Ok(());
         }
     };
 
-    log.check_network(repo_url)?;
+    let mut cloned = false;
+    for (mirror_name, repo_url) in &sources {
+        log.log(&format!("Trying {} mirror: {}", mirror_name, repo_url))?;
+        if log.check_network(repo_url).is_err() {
+            log.log(&format!("{} check failed, trying next...", mirror_name))?;
+            continue;
+        }
 
-    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        log.run_as_user(
-            &format!("Clone {}", name),
-            &sudo_user,
-            "git",
-            &["clone", repo_url, plugin_dir.to_str().unwrap()],
-        )?
-    } else {
-        log.run_download(
-            &format!("Clone {}", name),
-            "git",
-            &["clone", repo_url, plugin_dir.to_str().unwrap()],
-        )?
-    };
+        let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            log.run_as_user(
+                &format!("Clone {} from {}", name, mirror_name),
+                &sudo_user,
+                "git",
+                &["clone", repo_url, plugin_dir.to_str().unwrap()],
+            )?
+        } else {
+            log.run_download(
+                &format!("Clone {} from {}", name, mirror_name),
+                "git",
+                &["clone", repo_url, plugin_dir.to_str().unwrap()],
+            )?
+        };
+
+        if status.success() {
+            cloned = true;
+            break;
+        }
+        log.log(&format!("{} clone failed, trying next...", mirror_name))?;
+        // Clean up partial clone
+        let _ = std::fs::remove_dir_all(&plugin_dir);
+    }
 
     log.fix_ownership(plugin_dir.to_str().unwrap_or(""));
 
     let installed = plugin_dir.exists();
-    log.finish(installed && status.success());
+    log.finish(installed && cloned);
 
-    if !status.success() {
-        anyhow::bail!("插件 {} 下载失败", name);
+    if !cloned {
+        anyhow::bail!("插件 {} 下载失败，所有镜像均失败", name);
     }
     Ok(())
 }

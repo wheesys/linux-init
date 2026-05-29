@@ -675,6 +675,189 @@ log.flush()?;  // IMPORTANT: flush after each write so log is readable even if p
 
 Always call `log.flush()` after each `writeln!` — if the process hangs, unflushed logs are lost and the user sees an empty file.
 
+## Unified DownloadLogger Utility (Recommended Pattern)
+
+When you have **multiple download operations** (script downloads, git clones, plugin installs), avoid repeating the same logging/network-check/ownership-fix boilerplate in each function. Instead, create a single `DownloadLogger` utility class in `utils.rs` that combines all patterns:
+
+### Structure
+
+```rust
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
+pub struct DownloadLogger {
+    log: std::fs::File,
+    #[allow(dead_code)]
+    log_path: PathBuf,
+}
+
+impl DownloadLogger {
+    /// Create a new logger. Each operation gets its own log file.
+    /// Example log names: "omz-install.log", "vundle-install.log", "nvm-install.log"
+    pub fn new(log_name: &str) -> anyhow::Result<Self> {
+        let home = get_real_home()?;
+        let log_dir = home.join(".config").join("your-app");
+        fs::create_dir_all(&log_dir)?;
+        let log_path = log_dir.join(log_name);
+
+        let mut log = OpenOptions::new()
+            .create(true).append(true)
+            .open(&log_path)?;
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs()).unwrap_or(0);
+
+        writeln!(log, "\n=== {} Start: {} ===", log_name, timestamp)?;
+        log.flush()?;
+        Ok(Self { log, log_path })
+    }
+
+    pub fn log(&mut self, msg: &str) -> anyhow::Result<()> {
+        writeln!(self.log, "{}", msg)?;
+        self.log.flush()?;  // CRITICAL: flush after every write
+        Ok(())
+    }
+
+    /// Pre-download network check using curl's built-in timeout
+    pub fn check_network(&mut self, url: &str) -> anyhow::Result<()> {
+        self.log(&format!("Checking network: {}", url))?;
+        let output = Command::new("curl")
+            .args(["-sSL", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", url])
+            .output();
+        match output {
+            Ok(output) if output.status.success() => {
+                let code = String::from_utf8_lossy(&output.stdout);
+                self.log(&format!("Network OK, HTTP {}", code))?;
+                Ok(())
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let code = output.status.code().unwrap_or(-1);
+                self.log(&format!("Network failed: exit {}, {}", code, stderr))?;
+                anyhow::bail!("无法连接到网络 (exit code: {})", code);
+            }
+            Err(e) => {
+                self.log(&format!("Network check failed: {}", e))?;
+                anyhow::bail!("网络检测失败: {}", e);
+            }
+        }
+    }
+
+    /// Run a download command with real-time output visible to user
+    pub fn run_download(&mut self, desc: &str, cmd: &str, args: &[&str])
+        -> anyhow::Result<std::process::ExitStatus>
+    {
+        self.log(&format!("Running: {} - {} {}", desc, cmd, args.join(" ")))?;
+        let status = Command::new(cmd).args(args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
+        let code = status.code().unwrap_or(-1);
+        self.log(&format!("Exit code: {}", code))?;
+        Ok(status)
+    }
+
+    /// Run a command as the real user (sudo -u $SUDO_USER) for user-level installs
+    pub fn run_as_user(&mut self, desc: &str, user: &str, cmd: &str, args: &[&str])
+        -> anyhow::Result<std::process::ExitStatus>
+    {
+        self.log(&format!("Running as {}: {} - {} {}", user, desc, cmd, args.join(" ")))?;
+        let mut full_args: Vec<&str> = vec!["-u", user, cmd];
+        full_args.extend_from_slice(args);
+        let status = Command::new("sudo").args(&full_args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
+        let code = status.code().unwrap_or(-1);
+        self.log(&format!("Exit code: {}", code))?;
+        Ok(status)
+    }
+
+    /// Fix file ownership after sudo operations
+    pub fn fix_ownership(&mut self, path: &str) {
+        if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            self.log(&format!("Fixing ownership: {}:{}", sudo_user, path)).ok();
+            let _ = Command::new("chown")
+                .args(["-R", &format!("{}:{}", sudo_user, sudo_user), path])
+                .status();
+        }
+    }
+
+    pub fn finish(&mut self, success: bool) {
+        let msg = if success { "=== Success ===" } else { "=== Failed ===" };
+        self.log(msg).ok();
+    }
+}
+```
+
+### Usage Pattern
+
+Every download function follows the **same 6-step pattern**:
+
+```rust
+pub fn install_vundle() -> anyhow::Result<()> {
+    crate::utils::ensure_command("git")?;          // 1. Check dependencies
+
+    let home = get_real_home()?;
+    let vundle_dir = home.join(".vim/bundle/Vundle.vim");
+    let mut log = DownloadLogger::new("vundle-install.log")?;  // 2. Create logger
+    log.log(&format!("Vundle dir: {:?}", vundle_dir))?;
+
+    if vundle_dir.exists() {                       // 3. Check if already done
+        log.log("Already exists, skipping")?;
+        log.finish(true);
+        return Ok(());
+    }
+
+    let repo = "https://github.com/VundleVim/Vundle.vim.git";
+    log.check_network(repo)?;                       // 4. Network check
+
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("Clone Vundle", &sudo_user, "git",
+            &["clone", repo, vundle_dir.to_str().unwrap()])?   // 5. Execute
+    } else {
+        log.run_download("Clone Vundle", "git",
+            &["clone", repo, vundle_dir.to_str().unwrap()])?
+    };
+
+    log.fix_ownership(vundle_dir.to_str().unwrap_or(""));  // 6. Fix ownership
+    let installed = vundle_dir.exists();
+    log.finish(installed && status.success());
+
+    if !status.success() {
+        anyhow::bail!("Vundle install failed");
+    }
+    Ok(())
+}
+```
+
+### Key Benefits Over Inline Patterns
+
+1. **No code duplication**: All 6 download operations share the same utility
+2. **Debuggability**: Every operation produces a log file in `~/.config/your-app/`
+3. **Sudo-safe**: `run_as_user()` and `fix_ownership()` handle sudo correctly
+4. **User-visible output**: `Stdio::inherit()` ensures users see progress (not stuck)
+5. **Network safety**: `check_network()` prevents confusing hangs on bad connections
+6. **Consistent error messages**: All failures follow the same pattern
+
+### Network Check URL Selection
+
+When choosing the URL for `check_network()`, pick a **real file endpoint** rather than a domain root:
+
+```rust
+// WRONG — raw.githubusercontent.com HEAD returns 301 redirect
+log.check_network("https://raw.githubusercontent.com")?;
+
+// CORRECT — check the actual file you'll download, or a stable GitHub page
+log.check_network("https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh")?;
+log.check_network("https://github.com/VundleVim/Vundle.vim.git")?;  // for git clone
+```
+
 ## Gotchas
 
 1. **`ListItem` lifetime**: `make_list_items` needs explicit lifetime annotation:

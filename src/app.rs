@@ -109,6 +109,80 @@ pub const THEMES: &[(&str, &str)] = &[
     ("ys", ""),
 ];
 
+/// 每个主题对应的 prompt 示例（ASCII 模拟效果）
+pub const THEME_PREVIEWS: &[(&str, &[&str])] = &[
+    ("robbyrussell", &[
+        "➜  ~ git:(master) ✗",
+        "",
+        "单行简洁提示，显示路径和 git 状态",
+    ]),
+    ("af-magic", &[
+        "┌─ ~/projects  ── git:(master) ─────┐",
+        "└─$ ",
+        "",
+        "双行边框提示，路径和 git 分支分离",
+    ]),
+    ("agnoster", &[
+        " user@host  master ±  ~/projects ",
+        "",
+        "Powerline 分段风格，紧凑信息密集",
+    ]),
+    ("bira", &[
+        "╭─ user@host ─ [~/projects] ─ (master ✗)",
+        "╰─$ ",
+        "",
+        "双行圆角边框，彩色信息丰富",
+    ]),
+    ("clean", &[
+        "/home/user/projects (master) $ ",
+        "",
+        "极简风格，仅路径和 git 符号",
+    ]),
+    ("dst", &[
+        "[master] ~/projects $ ",
+        "",
+        "经典单行，git 分支在前",
+    ]),
+    ("gallifrey", &[
+        "╭─[TARDIS] ~/projects",
+        "╰─$ ",
+        "",
+        "Doctor Who 风格双行提示",
+    ]),
+    ("maran", &[
+        "user@host ~/projects (master) $ ",
+        "",
+        "简洁单行，用户@主机 + 路径",
+    ]),
+    ("minimal", &[
+        "⚡ ~/projects git:master ",
+        "",
+        "极简闪电风格，无多余符号",
+    ]),
+    ("powerlevel10k", &[
+        "  ~/projects  master !2 ?5  12:34 ",
+        "",
+        "高度可定制，需运行配置向导",
+        "显示 git 变更统计、时间等",
+    ]),
+    ("refined", &[
+        "~/projects  master $ ",
+        "",
+        "精炼单行，无特殊符号",
+    ]),
+    ("suvash", &[
+        "➜  ~/projects  git:(master)  ✗ ",
+        "",
+        "带箭头的 git 状态提示",
+    ]),
+    ("ys", &[
+        "# user @ host in ~/projects [master|✚2…1]",
+        "12:34:56 $ ",
+        "",
+        "信息丰富的双行，显示时间和变更",
+    ]),
+];
+
 pub const PLUGINS: &[(&str, &str)] = &[
     ("git", "内置"),
     ("zsh-autosuggestions", "第三方"),

@@ -316,6 +316,14 @@ fn render_shell(frame: &mut Frame, app: &App, area: Rect) {
 // ── Page: Theme ─────────────────────────────────────────────
 fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
     let lang = app.lang;
+
+    // Split area: left for list, right for preview
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    // Left: theme list
     let block = styled_block(i18n::theme_title(lang));
 
     let items: Vec<ListItem> = THEMES
@@ -352,7 +360,41 @@ fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
         .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.shell_theme_index));
-    frame.render_stateful_widget(list, area, &mut state);
+    frame.render_stateful_widget(list, chunks[0], &mut state);
+
+    // Right: preview panel
+    let selected_theme = THEMES
+        .get(app.shell_theme_index)
+        .map(|(name, _)| *name)
+        .unwrap_or("robbyrussell");
+
+    let preview_title = format!("{}  —  Preview", selected_theme);
+    let preview_block = styled_block(&preview_title);
+
+    let preview_lines: Vec<Line> = THEME_PREVIEWS
+        .iter()
+        .find(|(name, _)| *name == selected_theme)
+        .map(|(_, lines)| {
+            lines
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    if i == 0 || (!line.is_empty() && i <= 2) {
+                        // Prompt lines in cyan
+                        Line::styled(*line, Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
+                    } else {
+                        // Description lines in dim
+                        Line::styled(*line, Style::default().fg(C_DIM))
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_else(|| vec![Line::raw("")]);
+
+    let preview = Paragraph::new(preview_lines)
+        .block(preview_block)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(preview, chunks[1]);
 }
 
 // ── Page: OMZ Plugins ──────────────────────────────────────

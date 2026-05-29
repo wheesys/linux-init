@@ -27,23 +27,36 @@ pub fn install_nvm() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let install_url = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh";
-    log.check_network("https://github.com/nvm-sh/nvm")?;
+    let sources = [
+        ("GitHub", "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh"),
+        ("Gitee", "https://gitee.com/mirrors/nvm/raw/v0.40.1/install.sh"),
+    ];
 
-    // 下载安装脚本
     let tmp_script = "/tmp/linux-init-nvm-install.sh";
-    let status = log.run_download(
-        "Download NVM install script",
-        "curl",
-        &["-fSL", "--max-time", "60", "-o", tmp_script, install_url],
-    )?;
+    let mut downloaded = false;
 
-    if !status.success() {
-        let code = status.code().unwrap_or(-1);
-        if code == 28 {
-            anyhow::bail!("NVM 下载超时（60秒），请检查网络连接");
+    for (name, url) in &sources {
+        log.log(&format!("Trying {} mirror: {}", name, url))?;
+        if log.check_network(url).is_err() {
+            log.log(&format!("{} check failed, trying next...", name))?;
+            continue;
         }
-        anyhow::bail!("NVM 安装脚本下载失败 (exit code: {})", code);
+
+        let status = log.run_download(
+            &format!("Download from {}", name),
+            "curl",
+            &["-fSL", "--max-time", "60", "-o", tmp_script, url],
+        )?;
+
+        if status.success() {
+            downloaded = true;
+            break;
+        }
+        log.log(&format!("{} download failed, trying next...", name))?;
+    }
+
+    if !downloaded {
+        anyhow::bail!("NVM 安装脚本下载失败，所有镜像均失败");
     }
 
     // 执行安装

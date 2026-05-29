@@ -34,31 +34,50 @@ pub fn install_vundle() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let repo = "https://github.com/VundleVim/Vundle.vim.git";
-    log.check_network(repo)?;
+    let sources = [
+        ("GitHub", "https://github.com/VundleVim/Vundle.vim.git"),
+        ("Gitee", "https://gitee.com/mirrors/Vundle.vim.git"),
+    ];
 
-    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        log.run_as_user(
-            "Clone Vundle",
-            &sudo_user,
-            "git",
-            &["clone", repo, vundle_dir.to_str().unwrap()],
-        )?
-    } else {
-        log.run_download(
-            "Clone Vundle",
-            "git",
-            &["clone", repo, vundle_dir.to_str().unwrap()],
-        )?
-    };
+    let mut cloned = false;
+    for (name, repo) in &sources {
+        log.log(&format!("Trying {} mirror...", name))?;
+        if log.check_network(repo).is_err() {
+            log.log(&format!("{} check failed, trying next...", name))?;
+            continue;
+        }
+
+        let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            log.run_as_user(
+                &format!("Clone from {}", name),
+                &sudo_user,
+                "git",
+                &["clone", repo, vundle_dir.to_str().unwrap()],
+            )?
+        } else {
+            log.run_download(
+                &format!("Clone from {}", name),
+                "git",
+                &["clone", repo, vundle_dir.to_str().unwrap()],
+            )?
+        };
+
+        if status.success() {
+            cloned = true;
+            break;
+        }
+        log.log(&format!("{} clone failed, trying next...", name))?;
+        // Clean up partial clone
+        let _ = std::fs::remove_dir_all(&vundle_dir);
+    }
 
     log.fix_ownership(vundle_dir.to_str().unwrap_or(""));
 
     let installed = vundle_dir.exists();
-    log.finish(installed && status.success());
+    log.finish(installed && cloned);
 
-    if !status.success() {
-        anyhow::bail!("Vundle 安装失败");
+    if !cloned {
+        anyhow::bail!("Vundle 安装失败，所有下载源均失败");
     }
     Ok(())
 }
