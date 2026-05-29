@@ -41,7 +41,7 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
         "git" => Some("git"),
         "curl" => Some("curl"),
         "wget" => Some("wget"),
-        "htop" => Some("htop"),
+        "btop" => Some("btop"),
         "neovim" => Some("neovim"),
         "tmux" => Some("tmux"),
         "jq" => Some("jq"),
