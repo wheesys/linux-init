@@ -6,6 +6,10 @@ pub fn install_zsh() -> anyhow::Result<()> {
 }
 
 pub fn install_oh_my_zsh() -> anyhow::Result<()> {
+    // 确保依赖命令存在
+    crate::utils::ensure_command("curl")?;
+    crate::utils::ensure_command("git")?;
+    
     let home = get_real_home()?;
     let omz_dir = home.join(".oh-my-zsh");
     

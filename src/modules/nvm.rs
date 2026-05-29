@@ -25,6 +25,9 @@ fn nvm_dir() -> PathBuf {
 }
 
 pub fn install_nvm() -> anyhow::Result<()> {
+    // 确保依赖命令存在
+    crate::utils::ensure_command("curl")?;
+    
     let nvm_dir = nvm_dir();
     if nvm_dir.join("nvm.sh").exists() {
         return Ok(());

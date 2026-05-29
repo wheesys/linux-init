@@ -33,6 +33,9 @@ pub fn is_vundle_installed() -> bool {
 }
 
 pub fn install_vundle() -> anyhow::Result<()> {
+    // 确保依赖命令存在
+    crate::utils::ensure_command("git")?;
+    
     let home = get_real_home()?;
     let vundle_dir = home.join(".vim/bundle/Vundle.vim");
 

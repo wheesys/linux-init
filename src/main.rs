@@ -4,6 +4,7 @@ mod distro;
 mod i18n;
 mod modules;
 mod ui;
+mod utils;
 
 use anyhow::Result;
 use app::App;
