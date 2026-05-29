@@ -242,6 +242,88 @@ pub fn plugin_desc(lang: Lang, name: &str) -> &'static str {
 - Detect default language from `$LANG` env var at startup: `if lang.starts_with("zh") { Chinese } else { English }`
 - Add a `LangSelect` page as the first screen before MainMenu
 
+## Terminal Theme Compatibility
+
+**Always use `Color::Reset` instead of `Color::White`** for text that should be visible on both light and dark terminal backgrounds:
+
+```rust
+// WRONG — invisible on white backgrounds
+Span::styled(name, Style::default().fg(Color::White))
+
+// CORRECT — uses terminal's default foreground color
+Span::styled(name, Style::default().fg(Color::Reset))
+```
+
+For selected/highlighted items, combine with modifiers:
+```rust
+Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
+```
+
+## Universal Exit Handling (Ctrl+C)
+
+TUI apps MUST support Ctrl+C as a universal exit method (terminal convention). Check for it BEFORE any other key handling:
+
+```rust
+use crossterm::event::{KeyModifiers, KeyCode};
+
+pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option<Action>> {
+    if !event::poll(std::time::Duration::from_millis(50))? {
+        return Ok(None);
+    }
+    let ev = event::read()?;
+    if let Event::Key(key) = ev {
+        // Ctrl+C ALWAYS exits (terminal convention)
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(Some(Action::Quit));
+        }
+        // q exits only on certain pages (not multi-select pages)
+        if key.code == KeyCode::Char('q')
+            && !matches!(app.page, Page::PluginSelect | Page::ToolSelect | ...)
+        {
+            return Ok(Some(Action::Quit));
+        }
+        return handle_key(terminal, app, key);
+    }
+    Ok(None)
+}
+```
+
+**Key points:**
+- Ctrl+C must be checked FIRST, before any page-specific handling
+- Exclude multi-select pages from 'q' quit (users might type 'q' accidentally)
+- When Ctrl+C exits mid-operation, do NOT save incomplete config — only save when user explicitly confirms (Enter or Esc on multi-select)
+
+## Partial Save Behavior
+
+For multi-step configuration (e.g., plugin selection), implement partial save:
+- **Esc on multi-select page**: Save current selections and return to parent menu
+- **Enter on multi-select page**: Save current selections and return to parent menu
+- **Ctrl+C anywhere**: Exit immediately WITHOUT saving incomplete state
+
+```rust
+fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            // Save on Esc (user finished selecting)
+            if !app.selected_plugins.is_empty() {
+                crate::modules::shell::set_plugins(&app.selected_plugins)?;
+            }
+            app.page = Page::Shell;
+        }
+        KeyCode::Enter => {
+            // Save on Enter (user confirmed)
+            if !app.selected_plugins.is_empty() {
+                crate::modules::shell::set_plugins(&app.selected_plugins)?;
+            }
+            app.page = Page::Shell;
+        }
+        KeyCode::Char(' ') => { /* toggle selection, don't save yet */ }
+        _ => {}
+    }
+    Ok(None)
+}
+```
+
 ## Gotchas
 
 1. **`ListItem` lifetime**: `make_list_items` needs explicit lifetime annotation:

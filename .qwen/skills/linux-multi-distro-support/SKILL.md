@@ -209,6 +209,81 @@ call vundle#end()
 filetype plugin indent on
 ```
 
+## nvm (Node Version Manager) — Distro-Agnostic
+
+nvm is installed via curl pipe to bash, works on all distros:
+
+```rust
+pub fn is_nvm_installed() -> bool {
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(".nvm/nvm.sh")
+        .exists()
+}
+
+pub fn install_nvm() -> anyhow::Result<()> {
+    Command::new("bash")
+        .arg("-c")
+        .arg("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    Ok(())
+}
+```
+
+Install Node.js LTS via nvm in a subshell (nvm is a shell function, not a binary):
+```rust
+pub fn install_node_lts() -> anyhow::Result<()> {
+    let nvm_sh = dirs::home_dir()?.join(".nvm/nvm.sh");
+    let script = format!(
+        "source '{}' && nvm install --lts && nvm alias default lts/*",
+        nvm_sh.display()
+    );
+    Command::new("bash").arg("-c").arg(&script)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    Ok(())
+}
+```
+
+Check installed Node version:
+```rust
+pub fn installed_node_version() -> Option<String> {
+    let nvm_sh = dirs::home_dir()?.join(".nvm/nvm.sh");
+    let script = format!("source '{}' && node --version 2>/dev/null", nvm_sh.display());
+    let output = Command::new("bash").arg("-c").arg(&script).output().ok()?;
+    if output.status.success() {
+        let ver = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if ver.is_empty() { None } else { Some(ver) }
+    } else { None }
+}
+```
+
+Ensure shell integration (add nvm source lines to .bashrc/.zshrc if missing):
+```rust
+pub fn ensure_shell_integration() -> anyhow::Result<()> {
+    let home = dirs::home_dir()?;
+    let snippet = r#"
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+"#;
+    for rc in [".bashrc", ".zshrc"] {
+        let path = home.join(rc);
+        if !path.exists() { continue; }
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        if content.contains("NVM_DIR") { continue; }
+        let mut f = std::fs::OpenOptions::new().append(true).open(&path)?;
+        f.write_all(snippet.as_bytes())?;
+    }
+    Ok(())
+}
+```
+
 ## Common Patterns Across Distros
 
 These work identically on all target distros:

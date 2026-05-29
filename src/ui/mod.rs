@@ -22,7 +22,6 @@ const C_SUCCESS: Color = Color::Green;
 const C_WARN: Color = Color::Yellow;
 const C_ERROR: Color = Color::Red;
 const C_DIM: Color = Color::DarkGray;
-const C_HIGHLIGHT_BG: Color = Color::DarkGray;
 
 // ── Terminal helpers ────────────────────────────────────────
 pub fn setup_terminal() -> io::Result<Term> {
@@ -213,7 +212,7 @@ fn render_lang_select(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.lang_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -249,7 +248,7 @@ fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.menu_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -290,7 +289,7 @@ fn render_shell(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&all_items, app.shell_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.shell_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -332,7 +331,7 @@ fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.shell_theme_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -376,7 +375,7 @@ fn render_plugins(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.plugin_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -401,7 +400,7 @@ fn render_docker(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&items, app.docker_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.docker_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -421,7 +420,7 @@ fn render_ssh(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&items, app.ssh_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.ssh_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -462,7 +461,7 @@ fn render_ssh_server(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&items, app.ssh_server_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.ssh_server_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -509,7 +508,7 @@ fn render_tools(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.tool_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -525,7 +524,7 @@ fn render_vim(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&menu, app.vim_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.vim_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -568,7 +567,7 @@ fn render_vim_plugins(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.vim_plugin_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -588,7 +587,7 @@ fn render_nvm(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&items, app.nvm_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.nvm_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -608,7 +607,7 @@ fn render_locale(frame: &mut Frame, app: &App, area: Rect) {
     let items = make_list_items(&items, app.locale_index, &statuses);
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
 
     let mut state = ListState::default().with_selected(Some(app.locale_index));
     frame.render_stateful_widget(list, area, &mut state);
