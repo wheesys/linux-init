@@ -63,7 +63,8 @@ pub struct App {
 
     // -- ssh key --
     pub ssh_index: usize,
-    pub ssh_key_exists: bool,
+    pub ed25519_exists: bool,
+    pub rsa_exists: bool,
     pub last_pubkey: String,
 
     // -- ssh server --
@@ -227,8 +228,8 @@ impl App {
         let compose_installed = crate::distro::is_package_installed("docker-compose");
         let docker_user_configured = crate::modules::docker::is_user_in_docker_group();
         let docker_service_running = crate::modules::docker::is_docker_running();
-        let ssh_key_exists = home.join(".ssh/id_ed25519.pub").exists()
-            || home.join(".ssh/id_rsa.pub").exists();
+        let ed25519_exists = home.join(".ssh/id_ed25519.pub").exists();
+        let rsa_exists = home.join(".ssh/id_rsa.pub").exists();
         let vim_installed = crate::distro::is_package_installed("vim");
         let vundle_installed = home.join(".vim/bundle/Vundle.vim").exists();
 
@@ -293,7 +294,8 @@ impl App {
             docker_service_running,
 
             ssh_index: 0,
-            ssh_key_exists,
+            ed25519_exists,
+            rsa_exists,
             last_pubkey: String::new(),
 
             ssh_server_index: 0,

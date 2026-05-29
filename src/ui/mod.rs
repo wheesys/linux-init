@@ -507,7 +507,7 @@ fn render_ssh(frame: &mut Frame, app: &App, area: Rect) {
         .iter()
         .map(|(n, d)| (n.to_string(), d.to_string()))
         .collect();
-    let statuses = vec![app.ssh_key_exists, app.ssh_key_exists, false];
+    let statuses = vec![app.ed25519_exists, app.rsa_exists, false];
     let items = make_list_items(&items, app.ssh_index, &statuses);
     let list = List::new(items)
         .block(block)
@@ -1153,34 +1153,52 @@ fn handle_ssh(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
                 std::env::var("USER").unwrap_or_else(|_| "user".into())
             );
             match app.ssh_index {
-                0 => match crate::modules::ssh::generate_ed25519(&email) {
-                    Ok(pubkey) => {
-                        app.ssh_key_exists = true;
-                        app.last_pubkey = pubkey;
+                0 => {
+                    if app.ed25519_exists {
                         app.status_msg = match lang {
-                            Lang::Chinese => "✅ Ed25519 密钥已生成".into(),
-                            Lang::English => "✅ Ed25519 key generated".into(),
+                            Lang::Chinese => "✅ Ed25519 密钥已存在，无需重复生成".into(),
+                            Lang::English => "✅ Ed25519 key already exists".into(),
                         };
+                        return Ok(None);
                     }
-                    Err(e) => {
-                        app.status_msg =
-                            i18n::msg_fail(lang, "Ed25519 key", &e.to_string())
+                    match crate::modules::ssh::generate_ed25519(&email) {
+                        Ok(pubkey) => {
+                            app.ed25519_exists = true;
+                            app.last_pubkey = pubkey;
+                            app.status_msg = match lang {
+                                Lang::Chinese => "✅ Ed25519 密钥已生成".into(),
+                                Lang::English => "✅ Ed25519 key generated".into(),
+                            };
+                        }
+                        Err(e) => {
+                            app.status_msg =
+                                i18n::msg_fail(lang, "Ed25519 key", &e.to_string())
+                        }
                     }
-                },
-                1 => match crate::modules::ssh::generate_rsa(&email) {
-                    Ok(pubkey) => {
-                        app.ssh_key_exists = true;
-                        app.last_pubkey = pubkey;
+                }
+                1 => {
+                    if app.rsa_exists {
                         app.status_msg = match lang {
-                            Lang::Chinese => "✅ RSA 4096 密钥已生成".into(),
-                            Lang::English => "✅ RSA 4096 key generated".into(),
+                            Lang::Chinese => "✅ RSA 密钥已存在，无需重复生成".into(),
+                            Lang::English => "✅ RSA key already exists".into(),
                         };
+                        return Ok(None);
                     }
-                    Err(e) => {
-                        app.status_msg =
-                            i18n::msg_fail(lang, "RSA key", &e.to_string())
+                    match crate::modules::ssh::generate_rsa(&email) {
+                        Ok(pubkey) => {
+                            app.rsa_exists = true;
+                            app.last_pubkey = pubkey;
+                            app.status_msg = match lang {
+                                Lang::Chinese => "✅ RSA 4096 密钥已生成".into(),
+                                Lang::English => "✅ RSA 4096 key generated".into(),
+                            };
+                        }
+                        Err(e) => {
+                            app.status_msg =
+                                i18n::msg_fail(lang, "RSA key", &e.to_string())
+                        }
                     }
-                },
+                }
                 2 => match crate::modules::ssh::read_public_key() {
                     Ok(pubkey) => app.last_pubkey = pubkey,
                     Err(e) => app.status_msg = i18n::msg_fail(lang, "read key", &e.to_string()),

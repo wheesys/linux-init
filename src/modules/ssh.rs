@@ -90,10 +90,23 @@ pub fn read_public_key() -> anyhow::Result<String> {
     }
 }
 
+#[allow(dead_code)]
 pub fn has_ssh_key() -> bool {
+    has_ed25519_key() || has_rsa_key()
+}
+
+pub fn has_ed25519_key() -> bool {
     let home = match get_real_home() {
         Ok(h) => h,
         Err(_) => return false,
     };
-    home.join(".ssh/id_ed25519.pub").exists() || home.join(".ssh/id_rsa.pub").exists()
+    home.join(".ssh/id_ed25519.pub").exists()
+}
+
+pub fn has_rsa_key() -> bool {
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return false,
+    };
+    home.join(".ssh/id_rsa.pub").exists()
 }
