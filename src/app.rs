@@ -143,7 +143,7 @@ pub const TOOLS: &[(&str, &str, &str)] = &[
 impl App {
     pub fn new(distro: Distro) -> Self {
         let config = Config::load();
-        let home = dirs::home_dir().unwrap_or_default();
+        let home = Self::get_real_home();
         let zsh_installed = crate::distro::is_package_installed("zsh");
         let omz_installed = home.join(".oh-my-zsh").exists();
         let docker_installed = crate::distro::is_package_installed("docker");
@@ -238,6 +238,21 @@ impl App {
             fonts_installed: false,
             fcitx_installed: false,
         }
+    }
+
+    fn get_real_home() -> std::path::PathBuf {
+        if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            if let Ok(output) = std::process::Command::new("getent")
+                .args(["passwd", &sudo_user])
+                .output()
+            {
+                let line = String::from_utf8_lossy(&output.stdout);
+                if let Some(home) = line.split(':').nth(5) {
+                    return std::path::PathBuf::from(home.trim());
+                }
+            }
+        }
+        dirs::home_dir().unwrap_or_default()
     }
 
     fn read_current_theme(home: &std::path::Path) -> String {

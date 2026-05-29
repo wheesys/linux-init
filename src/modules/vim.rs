@@ -1,6 +1,19 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
+fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(std::path::PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+
 #[allow(dead_code)]
 pub fn is_vim_installed() -> bool {
     crate::distro::is_package_installed("vim")
@@ -12,15 +25,15 @@ pub fn install_vim() -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn is_vundle_installed() -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return false,
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return false,
     };
     home.join(".vim/bundle/Vundle.vim").exists()
 }
 
 pub fn install_vundle() -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let vundle_dir = home.join(".vim/bundle/Vundle.vim");
 
     if vundle_dir.exists() {
@@ -61,7 +74,7 @@ pub const VIM_PLUGINS: &[(&str, &str)] = &[
 ];
 
 pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let vimrc_path = home.join(".vimrc");
 
     let mut content = String::new();
@@ -142,9 +155,9 @@ pub fn install_plugin_bundle() -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn get_installed_plugin_count() -> usize {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return 0,
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return 0,
     };
     let bundle_dir = home.join(".vim/bundle");
     if !bundle_dir.exists() {

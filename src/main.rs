@@ -47,7 +47,7 @@ fn run_app(terminal: &mut ui::Term, app: &mut App) -> Result<()> {
 
 fn refresh_state(app: &mut App) {
     app.zsh_installed = distro::is_package_installed("zsh");
-    let home = dirs::home_dir().unwrap_or_default();
+    let home = get_real_home();
     app.omz_installed = home.join(".oh-my-zsh").exists();
     app.docker_installed = distro::is_package_installed("docker");
     app.compose_installed = distro::is_package_installed("docker-compose");
@@ -133,4 +133,19 @@ fn refresh_state(app: &mut App) {
     if config_changed {
         let _ = app.config.save();
     }
+}
+
+fn get_real_home() -> std::path::PathBuf {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if let Ok(output) = std::process::Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()
+        {
+            let line = String::from_utf8_lossy(&output.stdout);
+            if let Some(home) = line.split(':').nth(5) {
+                return std::path::PathBuf::from(home.trim());
+            }
+        }
+    }
+    dirs::home_dir().unwrap_or_default()
 }

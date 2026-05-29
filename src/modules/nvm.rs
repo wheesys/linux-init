@@ -1,13 +1,26 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+fn get_real_home() -> anyhow::Result<PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+
 pub fn is_nvm_installed() -> bool {
     nvm_dir().join("nvm.sh").exists()
 }
 
 fn nvm_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_default()
+    get_real_home()
+        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default())
         .join(".nvm")
 }
 
@@ -84,7 +97,7 @@ pub fn installed_node_version() -> Option<String> {
 pub fn ensure_shell_integration() -> anyhow::Result<()> {
     // nvm install script usually adds this to .bashrc/.zshrc,
     // but let's make sure it's there for the active shell
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let nvm_sh = nvm_dir().join("nvm.sh");
 
     let snippet = format!(

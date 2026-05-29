@@ -1,8 +1,21 @@
 use std::fs;
 use std::process::Command;
 
+fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(std::path::PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+
 pub fn generate_ed25519(email: &str) -> anyhow::Result<String> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let ssh_dir = home.join(".ssh");
     let key_path = ssh_dir.join("id_ed25519");
 
@@ -37,7 +50,7 @@ pub fn generate_ed25519(email: &str) -> anyhow::Result<String> {
 }
 
 pub fn generate_rsa(email: &str) -> anyhow::Result<String> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let ssh_dir = home.join(".ssh");
     let key_path = ssh_dir.join("id_rsa");
 
@@ -74,7 +87,7 @@ pub fn generate_rsa(email: &str) -> anyhow::Result<String> {
 }
 
 pub fn read_public_key() -> anyhow::Result<String> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let ssh_dir = home.join(".ssh");
 
     let ed25519 = ssh_dir.join("id_ed25519.pub");
@@ -90,9 +103,9 @@ pub fn read_public_key() -> anyhow::Result<String> {
 }
 
 pub fn has_ssh_key() -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return false,
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return false,
     };
     home.join(".ssh/id_ed25519.pub").exists() || home.join(".ssh/id_rsa.pub").exists()
 }

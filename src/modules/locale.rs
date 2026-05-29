@@ -2,6 +2,19 @@ use crate::distro::{self, DistroFamily};
 use std::fs;
 use std::process::{Command, Stdio};
 
+fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(std::path::PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+
 pub fn configure_locale() -> anyhow::Result<()> {
     let family = distro::detect().family();
 
@@ -81,7 +94,7 @@ pub fn install_cjk_fonts() -> anyhow::Result<()> {
 pub fn install_fcitx5() -> anyhow::Result<()> {
     distro::install_packages(&["fcitx5", "fcitx5-chinese-addons", "fcitx5-configtool"])?;
 
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let profile_path = home.join(".pam_environment");
 
     let env_vars = r#"GTK_IM_MODULE=fcitx5

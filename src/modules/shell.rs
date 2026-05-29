@@ -6,14 +6,14 @@ pub fn install_zsh() -> anyhow::Result<()> {
 }
 
 pub fn install_oh_my_zsh() -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let omz_dir = home.join(".oh-my-zsh");
 
     if omz_dir.exists() {
         return Ok(());
     }
 
-    // Download install script to a temp file, then execute
+    // Download install script
     let tmp_script = "/tmp/linux-init-omz-install.sh";
     let download = Command::new("curl")
         .args(["-fsSL", "-o", tmp_script,
@@ -27,15 +27,35 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接");
     }
 
-    let status = Command::new("sh")
-        .args([tmp_script, "", "--unattended"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    // Run as real user (not root)
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        Command::new("sudo")
+            .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?
+    } else {
+        Command::new("sh")
+            .args([tmp_script, "", "--unattended"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?
+    };
 
-    // Clean up temp file
+    // Clean up
     let _ = std::fs::remove_file(tmp_script);
+
+    // Fix ownership if running with sudo
+    if std::env::var("SUDO_USER").is_ok() {
+        let _ = Command::new("chown")
+            .args(["-R", &format!("{}:{}", 
+                std::env::var("SUDO_USER").unwrap_or_default(),
+                std::env::var("SUDO_USER").unwrap_or_default()
+            ), omz_dir.to_str().unwrap_or("")])
+            .status();
+    }
 
     if !status.success() {
         anyhow::bail!("Oh My Zsh 安装失败");
@@ -43,8 +63,21 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(std::path::PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+
 pub fn set_theme(theme: &str) -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let zshrc_path = home.join(".zshrc");
 
     let content = fs::read_to_string(&zshrc_path)?;
@@ -70,7 +103,7 @@ pub fn set_theme(theme: &str) -> anyhow::Result<()> {
 }
 
 pub fn set_plugins(plugins: &[String]) -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let zshrc_path = home.join(".zshrc");
 
     let content = fs::read_to_string(&zshrc_path)?;
@@ -98,7 +131,7 @@ pub fn set_plugins(plugins: &[String]) -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))?;
+    let home = get_real_home()?;
     let custom_plugins = home.join(".oh-my-zsh/custom/plugins");
 
     let plugin_dir = custom_plugins.join(name);
@@ -130,6 +163,13 @@ pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
         .stderr(Stdio::inherit())
         .status()?;
 
+    // Fix ownership if running with sudo
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let _ = Command::new("chown")
+            .args(["-R", &format!("{}:{}", sudo_user, sudo_user), plugin_dir.to_str().unwrap_or("")])
+            .status();
+    }
+
     if !status.success() {
         anyhow::bail!("插件 {} 下载失败", name);
     }
@@ -159,18 +199,18 @@ pub fn set_default_shell() -> anyhow::Result<()> {
 
 #[allow(dead_code)]
 pub fn is_third_party_plugin_installed(name: &str) -> bool {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return false,
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return false,
     };
     home.join(".oh-my-zsh/custom/plugins").join(name).exists()
 }
 
 #[allow(dead_code)]
 pub fn get_bundled_theme_list() -> Vec<(String, String)> {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => return vec![],
+    let home = match get_real_home() {
+        Ok(h) => h,
+        Err(_) => return vec![],
     };
     let themes_dir = home.join(".oh-my-zsh/themes");
     if !themes_dir.exists() {
