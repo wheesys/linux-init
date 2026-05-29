@@ -33,13 +33,23 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // 下载脚本 - 使用 inherit 让用户看到进度
+    // 下载脚本 - 使用 inherit 让用户看到进度，加超时
     let tmp_script = "/tmp/linux-init-omz-install.sh";
     writeln!(log, "Downloading install script to {}...", tmp_script)?;
     log.flush()?;
     
-    let download = Command::new("curl")
-        .args(["-fsSL", "-o", tmp_script,
+    // 先检测网络连通性
+    let ping = Command::new("timeout")
+        .args(["5", "curl", "-sSL", "--head", "https://raw.githubusercontent.com"])
+        .output();
+    
+    if ping.is_err() || !ping.as_ref().unwrap().status.success() {
+        writeln!(log, "Network check failed")?;
+        anyhow::bail!("无法连接到 github.com，请检查网络连接");
+    }
+    
+    let download = Command::new("timeout")
+        .args(["60", "curl", "-fsSL", "-o", tmp_script,
             "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -48,8 +58,12 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
 
     writeln!(log, "Download exit code: {:?}", download.code())?;
     if !download.success() {
-        writeln!(log, "Download failed")?;
-        anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接。日志: {:?}", log_path);
+        let code = download.code().unwrap_or(-1);
+        writeln!(log, "Download failed with code {}", code)?;
+        if code == 124 {
+            anyhow::bail!("下载超时（60秒），请检查网络连接");
+        }
+        anyhow::bail!("Oh My Zsh 安装脚本下载失败 (exit code: {})", code);
     }
 
     writeln!(log, "Download successful, script size: {} bytes", 

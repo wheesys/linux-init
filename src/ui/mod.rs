@@ -109,10 +109,10 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             format!(" {} | {} ", app.distro, lang),
             Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" │ ", Style::default().fg(C_DIM)),
-        Span::styled(keys, Style::default().fg(C_DIM)),
+        Span::styled(" │ ", Style::default().fg(Color::Reset)),
+        Span::styled(keys, Style::default().fg(Color::Reset)),
     ]);
-    let bar = Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 30, 30)));
+    let bar = Paragraph::new(text);
     frame.render_widget(bar, area);
 }
 
