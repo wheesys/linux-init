@@ -8,58 +8,104 @@ pub fn install_zsh() -> anyhow::Result<()> {
 pub fn install_oh_my_zsh() -> anyhow::Result<()> {
     let home = get_real_home()?;
     let omz_dir = home.join(".oh-my-zsh");
+    
+    // 创建日志目录
+    let log_dir = home.join(".config").join("linux-init");
+    std::fs::create_dir_all(&log_dir)?;
+    let log_path = log_dir.join("omz-install.log");
+    
+    let mut log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
+
+    use std::io::Write;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    writeln!(log, "\n=== OMZ Install Start: {} ===", timestamp)?;
+    writeln!(log, "Real home: {:?}", home)?;
+    writeln!(log, "OMZ dir: {:?}", omz_dir)?;
 
     if omz_dir.exists() {
+        writeln!(log, "OMZ already exists, skipping")?;
         return Ok(());
     }
 
-    // Download install script
+    // 下载脚本
     let tmp_script = "/tmp/linux-init-omz-install.sh";
+    writeln!(log, "Downloading install script to {}...", tmp_script)?;
+    
     let download = Command::new("curl")
         .args(["-fsSL", "-o", tmp_script,
             "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+        .output()?;
 
-    if !download.success() {
-        anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接");
+    writeln!(log, "Download exit code: {:?}", download.status.code())?;
+    if !download.status.success() {
+        let stderr = String::from_utf8_lossy(&download.stderr);
+        writeln!(log, "Download failed: {}", stderr)?;
+        anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接。日志: {:?}", log_path);
     }
 
-    // Run as real user (not root)
+    writeln!(log, "Download successful, script size: {} bytes", 
+        std::fs::metadata(tmp_script).map(|m| m.len()).unwrap_or(0))?;
+
+    // 执行安装
+    writeln!(log, "Checking SUDO_USER: {:?}", std::env::var("SUDO_USER"))?;
+    
     let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-        Command::new("sudo")
+        writeln!(log, "Running as user: {}", sudo_user)?;
+        let cmd = format!("sudo -u {} sh {} \"\" --unattended 2>&1", 
+            sudo_user, tmp_script);
+        writeln!(log, "Command: {}", cmd)?;
+        
+        let output = Command::new("sudo")
             .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()?
+            .output()?;
+        
+        writeln!(log, "Install exit code: {:?}", output.status.code())?;
+        writeln!(log, "Install stdout:\n{}", String::from_utf8_lossy(&output.stdout))?;
+        writeln!(log, "Install stderr:\n{}", String::from_utf8_lossy(&output.stderr))?;
+        
+        output.status
     } else {
-        Command::new("sh")
+        writeln!(log, "Running as current user (no SUDO_USER)")?;
+        let output = Command::new("sh")
             .args([tmp_script, "", "--unattended"])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()?
+            .output()?;
+        
+        writeln!(log, "Install exit code: {:?}", output.status.code())?;
+        writeln!(log, "Install stdout:\n{}", String::from_utf8_lossy(&output.stdout))?;
+        writeln!(log, "Install stderr:\n{}", String::from_utf8_lossy(&output.stderr))?;
+        
+        output.status
     };
 
-    // Clean up
+    // 清理
     let _ = std::fs::remove_file(tmp_script);
+    writeln!(log, "Cleaned up temp script")?;
 
-    // Fix ownership if running with sudo
-    if std::env::var("SUDO_USER").is_ok() {
-        let _ = Command::new("chown")
-            .args(["-R", &format!("{}:{}", 
-                std::env::var("SUDO_USER").unwrap_or_default(),
-                std::env::var("SUDO_USER").unwrap_or_default()
-            ), omz_dir.to_str().unwrap_or("")])
-            .status();
+    // 修复权限
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        writeln!(log, "Fixing ownership for {}...", sudo_user)?;
+        let chown_status = Command::new("chown")
+            .args(["-R", &format!("{}:{}", sudo_user, sudo_user), 
+                omz_dir.to_str().unwrap_or("")])
+            .status()?;
+        writeln!(log, "Chown exit code: {:?}", chown_status.code())?;
     }
 
-    if !status.success() {
-        anyhow::bail!("Oh My Zsh 安装失败");
+    // 检查安装结果
+    let installed = omz_dir.exists();
+    writeln!(log, "OMZ dir exists after install: {}", installed)?;
+    writeln!(log, "=== OMZ Install End ===\n")?;
+
+    if !status.success() || !installed {
+        anyhow::bail!("Oh My Zsh 安装失败。查看日志: {:?}", log_path);
     }
+    
     Ok(())
 }
 

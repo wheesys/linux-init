@@ -259,6 +259,16 @@ For selected/highlighted items, combine with modifiers:
 Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
 ```
 
+For list selection highlighting, use `Modifier::REVERSED` instead of explicit background colors — it swaps foreground and background, working correctly on any terminal theme:
+
+```rust
+// WRONG — DarkGray bg invisible on dark terminals, or text invisible on light terminals
+.highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+
+// CORRECT — REVERSED swaps fg/bg, always visible regardless of terminal theme
+.highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::REVERSED))
+```
+
 ## Universal Exit Handling (Ctrl+C)
 
 TUI apps MUST support Ctrl+C as a universal exit method (terminal convention). Check for it BEFORE any other key handling:
@@ -388,6 +398,52 @@ impl Config {
 }
 ```
 
+**IMPORTANT**: When the TUI app runs with `sudo`, `dirs::config_dir()` and `dirs::home_dir()` return root's paths. Use this sudo-aware version instead:
+
+```rust
+fn get_real_home() -> std::path::PathBuf {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if let Ok(output) = std::process::Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()
+        {
+            let line = String::from_utf8_lossy(&output.stdout);
+            if let Some(home) = line.split(':').nth(5) {
+                return std::path::PathBuf::from(home.trim());
+            }
+        }
+    }
+    dirs::home_dir().unwrap_or_default()
+}
+
+fn config_path() -> Option<PathBuf> {
+    Some(get_real_home().join(".config").join("your-app").join("config.json"))
+}
+```
+
+Also fix file/directory ownership after saving when running with sudo:
+```rust
+pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(path) = Self::config_path() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+            if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                let _ = std::process::Command::new("chown")
+                    .args([&format!("{}:{}", sudo_user, sudo_user), parent.to_str().unwrap_or("")])
+                    .status();
+            }
+        }
+        fs::write(&path, serde_json::to_string_pretty(self)?)?;
+        if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            let _ = std::process::Command::new("chown")
+                .args([&format!("{}:{}", sudo_user, sudo_user), path.to_str().unwrap_or("")])
+                .status();
+        }
+    }
+    Ok(())
+}
+```
+
 ### Skip Steps Based on Config
 ```rust
 pub fn new(distro: Distro) -> Self {
@@ -495,7 +551,7 @@ The common curl-pipe pattern can fail due to shell expansion issues. Use downloa
 
 ```rust
 pub fn install_oh_my_zsh() -> anyhow::Result<()> {
-    let home = dirs::home_dir()?;
+    let home = get_real_home()?;  // NOT dirs::home_dir() — must use real user's home under sudo
     let omz_dir = home.join(".oh-my-zsh");
     if omz_dir.exists() {
         return Ok(());
@@ -517,15 +573,33 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接");
     }
 
-    // Execute the downloaded script
-    let status = Command::new("sh")
-        .args([tmp_script, "", "--unattended"])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()?;
+    // CRITICAL: Run as real user (not root) when running with sudo
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        Command::new("sudo")
+            .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?
+    } else {
+        Command::new("sh")
+            .args([tmp_script, "", "--unattended"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?
+    };
 
-    // Clean up
+    // Fix ownership if running with sudo
+    if std::env::var("SUDO_USER").is_ok() {
+        let _ = Command::new("chown")
+            .args(["-R", &format!("{}:{}",
+                std::env::var("SUDO_USER").unwrap_or_default(),
+                std::env::var("SUDO_USER").unwrap_or_default()
+            ), omz_dir.to_str().unwrap_or("")])
+            .status();
+    }
+
     let _ = std::fs::remove_file(tmp_script);
 
     if !status.success() {
@@ -539,6 +613,8 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
 - Avoids shell expansion issues with `$(curl ...)`
 - Easier to debug if download fails
 - Temp file is cleaned up after execution
+- `sudo -u $SUDO_USER` ensures oh-my-zsh installs to real user's home, not `/root/`
+- `chown -R` fixes ownership when files are created during sudo execution
 
 ## Gotchas
 

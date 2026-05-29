@@ -284,6 +284,78 @@ export NVM_DIR="$HOME/.nvm"
 }
 ```
 
+## Sudo User Home Directory Detection (CRITICAL)
+
+When running with `sudo`, `dirs::home_dir()` returns `/root/` instead of the real user's home. This causes all user-level operations (dotfiles, SSH keys, oh-my-zsh, vim config) to install to the wrong directory.
+
+### The `get_real_home()` Pattern
+
+```rust
+fn get_real_home() -> anyhow::Result<std::path::PathBuf> {
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent")
+            .args(["passwd", &sudo_user])
+            .output()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        if let Some(home) = line.split(':').nth(5) {
+            return Ok(std::path::PathBuf::from(home.trim()));
+        }
+    }
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取 home 目录"))
+}
+```
+
+**Use this in EVERY module** that writes to user home: shell (zshrc, oh-my-zsh), ssh (keys), vim (vimrc, vundle), nvm (.nvm), locale (.xprofile), and config persistence.
+
+### Running User-Level Install Scripts Under Sudo
+
+Scripts like oh-my-zsh that create files in `$HOME` MUST run as the real user:
+
+```rust
+let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+    Command::new("sudo")
+        .args(["-u", &sudo_user, "sh", tmp_script, "", "--unattended"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?
+} else {
+    Command::new("sh")
+        .args([tmp_script, "", "--unattended"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?
+};
+```
+
+### Fix File Ownership After Sudo Operations
+
+```rust
+if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+    let _ = Command::new("chown")
+        .args(["-R", &format!("{}:{}", sudo_user, sudo_user), path.to_str()?])
+        .status();
+}
+```
+
+### Config Persistence Under Sudo
+
+`dirs::config_dir()` also returns root's config dir under sudo. Use `get_real_home()` for config paths and fix ownership after writing:
+
+```rust
+fn config_path() -> Option<PathBuf> {
+    let home = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        let output = Command::new("getent").args(["passwd", &sudo_user]).output().ok()?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        Some(PathBuf::from(line.split(':').nth(5)?.trim()))
+    } else {
+        dirs::home_dir()
+    };
+    home.map(|h| h.join(".config").join("your-app").join("config.json"))
+}
+```
+
 ## Common Patterns Across Distros
 
 These work identically on all target distros:
