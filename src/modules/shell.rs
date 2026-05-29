@@ -38,21 +38,25 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
     writeln!(log, "Downloading install script to {}...", tmp_script)?;
     log.flush()?;
     
-    // 先检测网络连通性 - 简单直接
+    // 先检测网络连通性
     writeln!(log, "Checking network connectivity...")?;
     log.flush()?;
-    
+
     let ping = Command::new("curl")
-        .args(["-sSL", "--max-time", "10", "--head", "https://raw.githubusercontent.com"])
+        .args(["-sSL", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", 
+               "https://github.com/ohmyzsh/ohmyzsh/blob/master/tools/install.sh"])
         .output();
-    
+
     match ping {
         Ok(output) if output.status.success() => {
-            writeln!(log, "Network check passed")?;
+            let status_code = String::from_utf8_lossy(&output.stdout);
+            writeln!(log, "Network check passed with HTTP status: {}", status_code)?;
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            writeln!(log, "Network check failed with exit code {:?}: {}", output.status.code(), stderr)?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            writeln!(log, "Network check failed with exit code {:?}, stdout: {}, stderr: {}", 
+                     output.status.code(), stdout, stderr)?;
             anyhow::bail!("无法连接到 github.com (exit code: {:?})，请检查网络连接", output.status.code());
         }
         Err(e) => {

@@ -364,3 +364,38 @@ These work identically on all target distros:
 - `chsh -s $(which zsh)` (same on both)
 - `ssh-keygen` (same on both)
 - `locale-gen` (same on both, after editing locale.gen)
+
+## Network Connectivity Checks
+
+**NEVER use the `timeout` command** — it's not available on minimal Ubuntu installations. Use curl's built-in `--max-time` parameter instead:
+
+```rust
+// WRONG — timeout command may not exist
+let ping = Command::new("timeout")
+    .args(["5", "curl", "-sSL", "--head", "https://example.com"])
+    .output();
+
+// CORRECT — curl has built-in timeout
+let ping = Command::new("curl")
+    .args(["-sSL", "--max-time", "10", "--head", "https://example.com"])
+    .output();
+
+match ping {
+    Ok(output) if output.status.success() => { /* network OK */ }
+    Ok(output) => { 
+        let code = output.status.code();
+        // curl exit code 28 = timeout, 6 = DNS failure, 7 = connection refused
+    }
+    Err(e) => { /* curl command failed to execute */ }
+}
+```
+
+For downloads that might hang, also use `--max-time`:
+```rust
+Command::new("curl")
+    .args(["-fSL", "--max-time", "60", "-o", output_path, url])
+    .stdin(Stdio::inherit())
+    .stdout(Stdio::inherit())
+    .stderr(Stdio::inherit())
+    .status()?;
+```

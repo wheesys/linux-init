@@ -16,7 +16,8 @@
       "Bash(git pull *)",
       "Bash(git *)",
       "Bash(gh *)",
-      "Bash(md5sum *)"
+      "Bash(md5sum *)",
+      "Bash(curl *)"
     ]
   },
   "$version": 4

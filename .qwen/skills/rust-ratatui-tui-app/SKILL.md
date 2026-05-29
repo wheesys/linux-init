@@ -616,6 +616,65 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
 - `sudo -u $SUDO_USER` ensures oh-my-zsh installs to real user's home, not `/root/`
 - `chown -R` fixes ownership when files are created during sudo execution
 
+## Status Bar Rendering
+
+**NEVER use explicit background colors for the status bar.** It creates visibility issues on terminals with unexpected themes. Instead, use `Color::Reset` for all text and no background:
+
+```rust
+// WRONG — text invisible on terminals with dark backgrounds
+let bar = Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 30, 30)));
+
+// CORRECT — adapts to any terminal theme
+let text = Line::from(vec![
+    Span::styled(keys, Style::default().fg(Color::Reset)),
+]);
+let bar = Paragraph::new(text);  // No explicit background
+```
+
+## Network-Dependent Operations
+
+When running commands that depend on network (curl downloads, git clone, etc.), use **built-in timeout parameters** rather than the `timeout` command:
+
+```rust
+// WRONG — `timeout` command may not be installed on all distros (e.g., minimal Ubuntu)
+Command::new("timeout").args(["60", "curl", ...])
+
+// CORRECT — use curl's built-in --max-time
+Command::new("curl").args(["--max-time", "60", ...])
+```
+
+For network connectivity checks before downloads, use a quick HEAD request with timeout:
+```rust
+let ping = Command::new("curl")
+    .args(["-sSL", "--max-time", "10", "--head", "https://example.com"])
+    .output();
+
+match ping {
+    Ok(output) if output.status.success() => { /* proceed */ }
+    Ok(output) => { /* show error with output.status.code() */ }
+    Err(e) => { /* command failed to execute */ }
+}
+```
+
+## Installation Logging Pattern
+
+For operations that may fail silently or hang, add file-based logging so users can debug:
+
+```rust
+use std::io::Write;
+
+let log_dir = get_real_home()?.join(".config").join("your-app");
+std::fs::create_dir_all(&log_dir)?;
+let mut log = std::fs::OpenOptions::new()
+    .create(true).append(true)
+    .open(log_dir.join("install.log"))?;
+
+writeln!(log, "=== Start: {} ===", timestamp)?;
+log.flush()?;  // IMPORTANT: flush after each write so log is readable even if process hangs
+```
+
+Always call `log.flush()` after each `writeln!` — if the process hangs, unflushed logs are lost and the user sees an empty file.
+
 ## Gotchas
 
 1. **`ListItem` lifetime**: `make_list_items` needs explicit lifetime annotation:
