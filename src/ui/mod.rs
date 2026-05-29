@@ -466,13 +466,13 @@ fn render_plugins(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut state = ListState::default().with_selected(Some(app.plugin_index));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-// ── Page: Docker ────────────────────────────────────────────
+// ── Page: Docker
 fn render_docker(frame: &mut Frame, app: &App, area: Rect) {
     let lang = app.lang;
     let block = styled_block(i18n::docker_title(lang));
@@ -599,7 +599,7 @@ fn render_tools(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut state = ListState::default().with_selected(Some(app.tool_index));
     frame.render_stateful_widget(list, area, &mut state);
@@ -658,7 +658,7 @@ fn render_vim_plugins(frame: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut state = ListState::default().with_selected(Some(app.vim_plugin_index));
     frame.render_stateful_widget(list, area, &mut state);
