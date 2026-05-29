@@ -12,6 +12,10 @@ pub fn install_docker() -> anyhow::Result<()> {
         }
         _ => anyhow::bail!("不支持的发行版"),
     }
+    
+    // 安装完成后自动启动 Docker 守护进程
+    start_docker_service()?;
+    
     Ok(())
 }
 
