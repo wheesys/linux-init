@@ -86,7 +86,6 @@ pub fn start_service() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn is_running() -> bool {
     Command::new("systemctl")
         .args(["is-active", "--quiet", "sshd"])

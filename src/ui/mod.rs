@@ -547,7 +547,7 @@ fn render_ssh_server(frame: &mut Frame, app: &App, area: Rect) {
     let statuses = vec![
         app.sshd_installed,
         app.sshd_root_disabled,
-        false,
+        app.sshd_running,
     ];
     let items = make_list_items(&items, app.ssh_server_index, &statuses);
     let list = List::new(items)
@@ -1189,37 +1189,50 @@ fn handle_ssh_server(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Acti
         KeyCode::Down => {
             app.ssh_server_index = (app.ssh_server_index + 1).min(max - 1)
         }
-        KeyCode::Enter => match app.ssh_server_index {
+        KeyCode::Enter => {
+            // 检查是否已完成，已完成则跳过
+            let already_done = match app.ssh_server_index {
+                0 => app.sshd_installed,
+                1 => app.sshd_root_disabled,
+                2 => app.sshd_running,
+                _ => false,
+            };
+            
+            if already_done {
+                app.status_msg = match lang {
+                    Lang::Chinese => "✅ 已完成，无需重复操作".into(),
+                    Lang::English => "✅ Already completed, no need to repeat".into(),
+                };
+                return Ok(None);
+            }
+            
+            match app.ssh_server_index {
             0 => {
-                if !app.sshd_installed {
-                    app.status_msg = i18n::msg_installing(lang, "OpenSSH Server");
-                    let success_msg = i18n::msg_success(lang, "OpenSSH Server");
-                    return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                        run_in_terminal(terminal, || {
-                            crate::modules::ssh_server::install()
-                        })?;
-                        Ok(success_msg)
-                    }))));
-                }
+                app.status_msg = i18n::msg_installing(lang, "OpenSSH Server");
+                let success_msg = i18n::msg_success(lang, "OpenSSH Server");
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || {
+                        crate::modules::ssh_server::install()
+                    })?;
+                    Ok(success_msg)
+                }))));
             }
             1 => {
-                if !app.sshd_root_disabled {
-                    let msg = match lang {
-                        Lang::Chinese => "正在配置禁止 root 登录...",
-                        Lang::English => "Configuring disable root login...",
-                    };
-                    app.status_msg = msg.into();
-                    let done_msg = match lang {
-                        Lang::Chinese => "✅ 已禁止 root 远程登录".to_string(),
-                        Lang::English => "✅ Root remote login disabled".to_string(),
-                    };
-                    return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                        run_in_terminal(terminal, || {
-                            crate::modules::ssh_server::disable_root_login()
-                        })?;
-                        Ok(done_msg)
-                    }))));
-                }
+                let msg = match lang {
+                    Lang::Chinese => "正在配置禁止 root 登录...",
+                    Lang::English => "Configuring disable root login...",
+                };
+                app.status_msg = msg.into();
+                let done_msg = match lang {
+                    Lang::Chinese => "✅ 已禁止 root 远程登录".to_string(),
+                    Lang::English => "✅ Root remote login disabled".to_string(),
+                };
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || {
+                        crate::modules::ssh_server::disable_root_login()
+                    })?;
+                    Ok(done_msg)
+                }))));
             }
             2 => {
                 let msg = match lang {
@@ -1239,7 +1252,8 @@ fn handle_ssh_server(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Acti
                 }))));
             }
             _ => {}
-        },
+        }
+        }
         _ => {}
     }
     Ok(None)
@@ -1455,6 +1469,13 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
         KeyCode::Down => app.nvm_index = (app.nvm_index + 1).min(max - 1),
         KeyCode::Enter => match app.nvm_index {
             0 => {
+                if app.nvm_installed {
+                    app.status_msg = match lang {
+                        Lang::Chinese => "✅ nvm 已安装，无需重复操作".into(),
+                        Lang::English => "✅ nvm already installed, no need to repeat".into(),
+                    };
+                    return Ok(None);
+                }
                 app.status_msg = i18n::msg_installing(lang, "nvm");
                 return Ok(Some(Action::Execute(Box::new(move |terminal| {
                     run_in_terminal(terminal, || crate::modules::nvm::install_nvm())?;
@@ -1466,6 +1487,13 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
                     app.status_msg = match lang {
                         Lang::Chinese => "❌ 请先安装 nvm".into(),
                         Lang::English => "❌ Please install nvm first".into(),
+                    };
+                    return Ok(None);
+                }
+                if app.node_installed {
+                    app.status_msg = match lang {
+                        Lang::Chinese => "✅ Node.js LTS 已安装，无需重复操作".into(),
+                        Lang::English => "✅ Node.js LTS already installed, no need to repeat".into(),
                     };
                     return Ok(None);
                 }
@@ -1506,6 +1534,22 @@ fn handle_locale(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         KeyCode::Up => app.locale_index = app.locale_index.saturating_sub(1),
         KeyCode::Down => app.locale_index = (app.locale_index + 1).min(max - 1),
         KeyCode::Enter => {
+            // 检查是否已完成，已完成则跳过
+            let already_done = match app.locale_index {
+                0 => app.locale_configured,
+                1 => app.fonts_installed,
+                2 => app.fcitx_installed,
+                _ => false,
+            };
+            
+            if already_done {
+                app.status_msg = match lang {
+                    Lang::Chinese => "✅ 已完成，无需重复操作".into(),
+                    Lang::English => "✅ Already completed, no need to repeat".into(),
+                };
+                return Ok(None);
+            }
+            
             let (before, after): (&str, String) = match (lang, app.locale_index) {
                 (Lang::Chinese, 0) => ("正在配置中文 locale...", "✅ 中文 locale 配置成功".into()),
                 (Lang::English, 0) => ("Configuring Chinese locale...", "✅ Chinese locale configured".into()),

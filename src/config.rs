@@ -35,6 +35,7 @@ pub struct CompletedModules {
 
     pub ssh_server_installed: bool,
     pub ssh_server_configured: bool,
+    pub ssh_server_running: bool,
 
     pub chinese_locale_configured: bool,
     pub chinese_fonts_installed: bool,

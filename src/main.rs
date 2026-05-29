@@ -57,6 +57,7 @@ fn refresh_state(app: &mut App) {
     app.ssh_key_exists = modules::ssh::has_ssh_key();
     app.sshd_installed = modules::ssh_server::is_installed();
     app.sshd_root_disabled = modules::ssh_server::is_root_login_disabled();
+    app.sshd_running = modules::ssh_server::is_running();
     app.locale_configured = modules::locale::is_locale_configured();
     app.fcitx_installed = modules::locale::is_fcitx_installed();
     app.fonts_installed = distro::is_package_installed("noto-fonts-cjk");
@@ -105,6 +106,10 @@ fn refresh_state(app: &mut App) {
     }
     if app.sshd_root_disabled && !app.config.completed.ssh_server_configured {
         app.config.completed.ssh_server_configured = true;
+        config_changed = true;
+    }
+    if app.sshd_running && !app.config.completed.ssh_server_running {
+        app.config.completed.ssh_server_running = true;
         config_changed = true;
     }
     if app.vim_installed && !app.config.completed.vim_installed {

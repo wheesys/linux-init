@@ -70,6 +70,7 @@ pub struct App {
     pub ssh_server_index: usize,
     pub sshd_installed: bool,
     pub sshd_root_disabled: bool,
+    pub sshd_running: bool,
 
     // -- tools --
     pub tool_index: usize,
@@ -296,6 +297,7 @@ impl App {
             ssh_server_index: 0,
             sshd_installed: crate::modules::ssh_server::is_installed(),
             sshd_root_disabled: crate::modules::ssh_server::is_root_login_disabled(),
+            sshd_running: crate::modules::ssh_server::is_running(),
 
             tool_index: 0,
             selected_tools: vec![false; TOOLS.len()],
