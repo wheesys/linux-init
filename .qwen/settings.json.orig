@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo init *)",
+      "Bash(mkdir *)",
+      "Bash(rustc *)",
+      "Bash(cargo *)",
+      "Bash(file *)",
+      "Bash(ldd *)",
+      "Bash(git log *)",
+      "Bash(git remote *)"
+    ]
+  },
+  "$version": 4
+}

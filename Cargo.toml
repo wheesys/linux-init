@@ -1,0 +1,18 @@
+[package]
+name = "linux-init"
+version = "0.1.0"
+edition = "2021"
+description = "Linux 环境初始化工具 - TUI 向导"
+license = "MIT"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+serde = { version = "1", features = ["derive"] }
+dirs = "5"
+anyhow = "1"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
