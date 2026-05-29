@@ -7,7 +7,7 @@ use ratatui::{
     Frame, Terminal,
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, terminal,
 };
 use std::io::{self, Stdout};
@@ -634,6 +634,10 @@ pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option
     }
     let ev = event::read()?;
     if let Event::Key(key) = ev {
+        // Ctrl+C 退出（终端通用方案）
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(Some(Action::Quit));
+        }
         if key.code == KeyCode::Char('q')
             && !matches!(
                 app.page,
