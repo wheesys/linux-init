@@ -13,13 +13,29 @@ pub fn install_oh_my_zsh() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let status = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) \"\" --unattended")
+    // Download install script to a temp file, then execute
+    let tmp_script = "/tmp/linux-init-omz-install.sh";
+    let download = Command::new("curl")
+        .args(["-fsSL", "-o", tmp_script,
+            "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()?;
+
+    if !download.success() {
+        anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接");
+    }
+
+    let status = Command::new("sh")
+        .args([tmp_script, "", "--unattended"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(tmp_script);
 
     if !status.success() {
         anyhow::bail!("Oh My Zsh 安装失败");
