@@ -324,6 +324,222 @@ fn handle_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>
 }
 ```
 
+## Config Persistence Pattern
+
+For TUI apps that guide users through multi-step setup, persist state to avoid repeating completed steps:
+
+### Dependencies
+```toml
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+### Config Structure
+```rust
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Config {
+    pub language: Option<String>,  // "zh" or "en"
+    pub completed: CompletedModules,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CompletedModules {
+    pub zsh_installed: bool,
+    pub docker_installed: bool,
+    pub ssh_key_generated: bool,
+    // ... track each module
+}
+```
+
+### Load/Save Functions
+```rust
+impl Config {
+    pub fn load() -> Self {
+        if let Some(path) = Self::config_path() {
+            if path.exists() {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(config) = serde_json::from_str(&content) {
+                        return config;
+                    }
+                }
+            }
+        }
+        Self::default()
+    }
+
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(path) = Self::config_path() {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let content = serde_json::to_string_pretty(self)?;
+            fs::write(&path, content)?;
+        }
+        Ok(())
+    }
+
+    fn config_path() -> Option<PathBuf> {
+        dirs::config_dir().map(|p| p.join("your-app").join("config.json"))
+    }
+}
+```
+
+### Skip Steps Based on Config
+```rust
+pub fn new(distro: Distro) -> Self {
+    let config = Config::load();
+    
+    // Skip language selection if already saved
+    let (lang, page) = if let Some(ref lang_str) = config.language {
+        let lang = match lang_str.as_str() {
+            "zh" => Lang::Chinese,
+            _ => Lang::English,
+        };
+        (lang, Page::MainMenu)  // Skip to main menu
+    } else {
+        (Lang::Chinese, Page::LangSelect)  // Ask for language
+    };
+    
+    Self { config, lang, page, ... }
+}
+```
+
+### Save After User Actions
+```rust
+fn handle_lang_select(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+    match key.code {
+        KeyCode::Enter => {
+            app.lang = if app.lang_index == 0 { Lang::Chinese } else { Lang::English };
+            app.page = Page::MainMenu;
+            
+            // Save language to config
+            app.config.language = Some(match app.lang {
+                Lang::Chinese => "zh".to_string(),
+                Lang::English => "en".to_string(),
+            });
+            let _ = app.config.save();
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+```
+
+### State Synchronization
+
+After detecting actual system state, sync it back to config to track completions:
+
+```rust
+fn refresh_state(app: &mut App) {
+    // Detect actual state
+    app.zsh_installed = distro::is_package_installed("zsh");
+    app.docker_installed = distro::is_package_installed("docker");
+    app.ssh_key_exists = modules::ssh::has_ssh_key();
+    // ...
+
+    // Sync config with actual state
+    let mut config_changed = false;
+
+    if app.zsh_installed && !app.config.completed.zsh_installed {
+        app.config.completed.zsh_installed = true;
+        config_changed = true;
+    }
+    if app.docker_installed && !app.config.completed.docker_installed {
+        app.config.completed.docker_installed = true;
+        config_changed = true;
+    }
+    // ... for each module
+
+    if config_changed {
+        let _ = app.config.save();
+    }
+}
+```
+
+Call `refresh_state` after each action and on app startup to keep config in sync with reality.
+
+### Show Completion Status in Menu
+```rust
+fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
+    let completion_status = vec![
+        app.config.completed.zsh_installed,
+        app.config.completed.docker_installed,
+        app.config.completed.ssh_key_generated,
+        // ...
+    ];
+
+    let items: Vec<ListItem> = menu
+        .iter()
+        .enumerate()
+        .map(|(i, (name, desc))| {
+            let status_mark = if completion_status.get(i).copied().unwrap_or(false) {
+                Span::styled("✓ ", Style::default().fg(Color::Green))
+            } else {
+                Span::raw("  ")
+            };
+            // ... rest of rendering
+            ListItem::new(Line::from(vec![marker, status_mark, name_s, desc_s]))
+        })
+        .collect();
+    // ...
+}
+```
+
+## Oh-My-Zsh Installation Pattern
+
+The common curl-pipe pattern can fail due to shell expansion issues. Use download-then-execute instead:
+
+```rust
+pub fn install_oh_my_zsh() -> anyhow::Result<()> {
+    let home = dirs::home_dir()?;
+    let omz_dir = home.join(".oh-my-zsh");
+    if omz_dir.exists() {
+        return Ok(());
+    }
+
+    // Download install script to temp file
+    let tmp_script = "/tmp/linux-init-omz-install.sh";
+    let download = Command::new("curl")
+        .args([
+            "-fsSL", "-o", tmp_script,
+            "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
+        ])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    if !download.success() {
+        anyhow::bail!("Oh My Zsh 安装脚本下载失败，请检查网络连接");
+    }
+
+    // Execute the downloaded script
+    let status = Command::new("sh")
+        .args([tmp_script, "", "--unattended"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    // Clean up
+    let _ = std::fs::remove_file(tmp_script);
+
+    if !status.success() {
+        anyhow::bail!("Oh My Zsh 安装失败");
+    }
+    Ok(())
+}
+```
+
+**Why this works better:**
+- Avoids shell expansion issues with `$(curl ...)`
+- Easier to debug if download fails
+- Temp file is cleaned up after execution
+
 ## Gotchas
 
 1. **`ListItem` lifetime**: `make_list_items` needs explicit lifetime annotation:
