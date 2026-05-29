@@ -18,6 +18,14 @@ pub fn install(packages: &[&str]) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn uninstall(packages: &[&str]) -> anyhow::Result<()> {
+    if packages.is_empty() { return Ok(()); }
+    let status = Command::new("sudo")
+        .arg("pacman").arg("-R").arg("--noconfirm").args(packages).status()?;
+    if !status.success() { anyhow::bail!("pacman 卸载失败"); }
+    Ok(())
+}
+
 pub fn is_installed(package: &str) -> bool {
     Command::new("pacman")
         .arg("-Qi")
@@ -49,6 +57,8 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
         "docker" => Some("docker"),
         "docker-compose" => Some("docker-compose"),
         "noto-fonts-cjk" => Some("noto-fonts-cjk"),
+        "wqy-microhei" => Some("wqy-microhei"),
+        "wqy-zenhei" => Some("wqy-zenhei"),
         "fcitx5" => Some("fcitx5"),
         "fcitx5-chinese-addons" => Some("fcitx5-chinese-addons"),
         "fcitx5-configtool" => Some("fcitx5-configtool"),

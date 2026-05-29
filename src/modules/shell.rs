@@ -308,3 +308,13 @@ pub fn get_bundled_theme_list() -> Vec<(String, String)> {
     themes.sort_by(|a, b| a.0.cmp(&b.0));
     themes
 }
+
+pub fn clear_shell() -> anyhow::Result<()> {
+    let home = get_real_home()?;
+    let omz_dir = home.join(".oh-my-zsh");
+    if omz_dir.exists() {
+        std::fs::remove_dir_all(&omz_dir)?;
+    }
+    crate::distro::uninstall_packages(&["zsh"])?;
+    Ok(())
+}

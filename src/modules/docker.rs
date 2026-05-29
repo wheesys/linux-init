@@ -81,3 +81,10 @@ pub fn is_user_in_docker_group() -> bool {
         })
         .unwrap_or(false)
 }
+
+pub fn clear_docker() -> anyhow::Result<()> {
+    let _ = std::process::Command::new("sudo").args(["systemctl", "stop", "docker"]).status();
+    let _ = std::process::Command::new("sudo").args(["gpasswd", "-d", &std::env::var("SUDO_USER").unwrap_or_default(), "docker"]).status();
+    crate::distro::uninstall_packages(&["docker", "docker-compose"])?;
+    Ok(())
+}

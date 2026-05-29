@@ -30,8 +30,8 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("🔧 基础工具", "安装常用开发工具"),
             ("🖥️ SSH 服务", "安装并配置 SSH 远程登录"),
             ("📝 Vim 配置", "安装 Vim, Vundle 和插件"),
-            ("🟢 Node.js (nvm)", "安装 nvm 和 Node.js LTS"),
-            ("🇨🇳 中文配置", "配置中文 locale、字体和输入法"),
+            ("🟢 Node.js (nvm)", "安装 nvm 和 Node.js（可选版本）"),
+            ("🇨🇳 中文配置", "配置中文 locale、字体和输入法（支持 Wayland/WPS）"),
         ],
         Lang::English => &[
             ("🐚 Shell Config", "Configure bash/zsh, oh-my-zsh"),
@@ -40,7 +40,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("🔧 Basic Tools", "Install common dev tools"),
             ("🖥️ SSH Server", "Install and configure SSH server"),
             ("📝 Vim Config", "Install Vim, Vundle and plugins"),
-            ("🟢 Node.js (nvm)", "Install nvm and Node.js LTS"),
+            ("🟢 Node.js (nvm)", "Install nvm and Node.js (choose version)"),
             ("🇨🇳 Chinese Config", "Configure Chinese locale, fonts and input"),
         ],
     }
@@ -204,16 +204,18 @@ pub fn docker_title(lang: Lang) -> &'static str {
 pub fn docker_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
     match lang {
         Lang::Chinese => &[
-            ("安装 Docker", "安装 Docker 引擎"),
-            ("安装 Docker Compose", "安装 Docker Compose 插件"),
-            ("配置非 root 用户", "将当前用户加入 docker 组"),
-            ("启动 Docker 服务", "启用并启动 docker.service"),
+            ("1. 安装 Docker", "安装 Docker 引擎"),
+            ("2. 安装 Docker Compose", "安装 Docker Compose 插件"),
+            ("3. 配置非 root 用户", "将当前用户加入 docker 组"),
+            ("4. 启动 Docker 服务", "启用并启动 docker.service"),
+            ("5. 清空 Docker", "卸载 Docker 并移除配置"),
         ],
         Lang::English => &[
-            ("Install Docker", "Install Docker engine"),
-            ("Install Docker Compose", "Install Docker Compose plugin"),
-            ("Configure non-root", "Add current user to docker group"),
-            ("Start Docker Service", "Enable and start docker.service"),
+            ("1. Install Docker", "Install Docker engine"),
+            ("2. Install Docker Compose", "Install Docker Compose plugin"),
+            ("3. Configure non-root", "Add current user to docker group"),
+            ("4. Start Docker Service", "Enable and start docker.service"),
+            ("5. Clear Docker", "Uninstall Docker and remove config"),
         ],
     }
 }
@@ -236,14 +238,36 @@ pub fn ssh_pubkey_title(lang: Lang) -> &'static str {
 pub fn ssh_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
     match lang {
         Lang::Chinese => &[
-            ("生成 Ed25519 密钥", "推荐 - 更安全、更快"),
-            ("生成 RSA 4096 密钥", "兼容性最好"),
-            ("查看已有公钥", "显示当前公钥内容"),
+            ("1. 生成 Ed25519 密钥", "推荐 - 更安全、更快"),
+            ("2. 生成 RSA 4096 密钥", "兼容性最好"),
+            ("3. 查看已有公钥", "显示当前公钥内容"),
+            ("4. 清空 SSH 密钥", "删除已生成的密钥对"),
         ],
         Lang::English => &[
-            ("Generate Ed25519 Key", "Recommended - more secure and faster"),
-            ("Generate RSA 4096 Key", "Best compatibility"),
-            ("View Existing Key", "Show current public key"),
+            ("1. Generate Ed25519 Key", "Recommended - more secure and faster"),
+            ("2. Generate RSA 4096 Key", "Best compatibility"),
+            ("3. View Existing Key", "Show current public key"),
+            ("4. Clear SSH Keys", "Remove generated key pairs"),
+        ],
+    }
+}
+
+pub fn nvm_node_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "选择 Node.js 版本",
+        Lang::English => "Select Node.js Version",
+    }
+}
+
+pub fn nvm_node_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
+    match lang {
+        Lang::Chinese => &[
+            ("最新版", "安装最新稳定版 Node.js（nvm install node）"),
+            ("LTS 长期支持版", "安装最新 LTS 版本 Node.js（nvm install --lts）"),
+        ],
+        Lang::English => &[
+            ("Latest", "Install latest stable Node.js (nvm install node)"),
+            ("LTS", "Install latest Long Term Support version (nvm install --lts)"),
         ],
     }
 }
@@ -317,14 +341,16 @@ pub fn ssh_server_title(lang: Lang) -> &'static str {
 pub fn ssh_server_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
     match lang {
         Lang::Chinese => &[
-            ("安装 OpenSSH Server", "安装 sshd 服务端"),
-            ("配置安全选项", "禁止 root 远程登录"),
-            ("启动 SSH 服务", "启用并启动 sshd 服务"),
+            ("1. 安装 OpenSSH Server", "安装 sshd 服务端"),
+            ("2. 配置安全选项", "禁止 root 远程登录"),
+            ("3. 启动 SSH 服务", "启用并启动 sshd 服务"),
+            ("4. 清空 SSH 服务", "停止并卸载 SSH 服务"),
         ],
         Lang::English => &[
-            ("Install OpenSSH Server", "Install sshd server"),
-            ("Configure Security", "Disable root remote login"),
-            ("Start SSH Service", "Enable and start sshd service"),
+            ("1. Install OpenSSH Server", "Install sshd server"),
+            ("2. Configure Security", "Disable root remote login"),
+            ("3. Start SSH Service", "Enable and start sshd service"),
+            ("4. Clear SSH Server", "Stop and uninstall SSH server"),
         ],
     }
 }
@@ -347,14 +373,18 @@ pub fn vim_plugin_title(lang: Lang) -> &'static str {
 pub fn vim_menu(lang: Lang) -> Vec<(String, String)> {
     match lang {
         Lang::Chinese => vec![
-            ("安装 Vim".into(), "终端文本编辑器".into()),
-            ("安装 Vundle".into(), "Vim 插件管理器".into()),
-            ("选择插件".into(), "选择要安装的 Vim 插件".into()),
+            ("1. 安装 Vim".into(), "终端文本编辑器".into()),
+            ("2. 安装 Vundle".into(), "Vim 插件管理器".into()),
+            ("3. 选择插件".into(), "选择要安装的 Vim 插件".into()),
+            ("4. 优化 Vim".into(), "启用通用 Vim 优化设置".into()),
+            ("5. 清空 Vim".into(), "卸载 Vim 并删除所有配置".into()),
         ],
         Lang::English => vec![
-            ("Install Vim".into(), "Terminal text editor".into()),
-            ("Install Vundle".into(), "Vim plugin manager".into()),
-            ("Select Plugins".into(), "Choose Vim plugins to install".into()),
+            ("1. Install Vim".into(), "Terminal text editor".into()),
+            ("2. Install Vundle".into(), "Vim plugin manager".into()),
+            ("3. Select Plugins".into(), "Choose Vim plugins to install".into()),
+            ("4. Optimize Vim".into(), "Enable general Vim optimization settings".into()),
+            ("5. Clear Vim".into(), "Uninstall Vim and remove all config".into()),
         ],
     }
 }
@@ -389,6 +419,73 @@ pub fn vim_plugin_desc(lang: Lang, name: &str) -> &'static str {
     }
 }
 
+pub fn vim_opt_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "Vim 优化设置 (Space 切换)",
+        Lang::English => "Vim Optimizations (Space to toggle)",
+    }
+}
+
+pub fn vim_opt_name(lang: Lang, key: &str) -> &'static str {
+    match (lang, key) {
+        (Lang::Chinese, "mouse") => "启用鼠标",
+        (Lang::Chinese, "scrolloff") => "滚动留白",
+        (Lang::Chinese, "laststatus") => "始终显示状态行",
+        (Lang::Chinese, "ignorecase") => "搜索忽略大小写",
+        (Lang::Chinese, "fileformat") => "强制 Unix 换行",
+        (Lang::Chinese, "cindent") => "C 风格缩进",
+        (Lang::Chinese, "autoread") => "外部修改自动重载",
+        (Lang::Chinese, "whichwrap") => "行首行尾光标折返",
+        (Lang::Chinese, "matchtime") => "短暂高亮匹配括号",
+        (Lang::Chinese, "selection") => "更好的可视选择",
+        (Lang::Chinese, "guioptions") => "隐藏 GUI 滚动条",
+        (Lang::Chinese, "showtabline") => "隐藏标签栏",
+        (Lang::English, "mouse") => "Enable Mouse",
+        (Lang::English, "scrolloff") => "Scroll Context",
+        (Lang::English, "laststatus") => "Always Show Statusline",
+        (Lang::English, "ignorecase") => "Ignore Case in Search",
+        (Lang::English, "fileformat") => "Force Unix Line Endings",
+        (Lang::English, "cindent") => "C-Style Indentation",
+        (Lang::English, "autoread") => "Auto-Reload on External Change",
+        (Lang::English, "whichwrap") => "Wrap Cursor at Line Boundaries",
+        (Lang::English, "matchtime") => "Briefly Highlight Matching Bracket",
+        (Lang::English, "selection") => "Better Visual Selection",
+        (Lang::English, "guioptions") => "Hide GUI Scrollbars",
+        (Lang::English, "showtabline") => "Hide Tab Line",
+        _ => "",
+    }
+}
+
+pub fn vim_opt_desc(lang: Lang, key: &str) -> &'static str {
+    match (lang, key) {
+        (Lang::Chinese, "mouse") => "在所有模式中使用鼠标（普通/可视/插入/命令）",
+        (Lang::Chinese, "scrolloff") => "光标上下始终保持 5 行可见上下文",
+        (Lang::Chinese, "laststatus") => "即使只有一个窗口也显示状态行",
+        (Lang::Chinese, "ignorecase") => "搜索时默认忽略大小写",
+        (Lang::Chinese, "fileformat") => "默认使用 LF 换行符，避免 Windows 换行问题",
+        (Lang::Chinese, "cindent") => "类 C 语言的自动缩进（比 smartindent 更精确）",
+        (Lang::Chinese, "autoread") => "文件被外部程序修改后自动重新加载",
+        (Lang::Chinese, "whichwrap") => "方向键在行首/行尾可跳到上一行/下一行",
+        (Lang::Chinese, "matchtime") => "输入匹配括号时短暂高亮 0.5 秒",
+        (Lang::Chinese, "selection") => "可视选择排除最后一个字符 + 鼠标/键盘可视模式",
+        (Lang::Chinese, "guioptions") => "移除 GVim 右侧/左侧滚动条和底部工具栏",
+        (Lang::Chinese, "showtabline") => "只有一个标签页时隐藏标签栏",
+        (Lang::English, "mouse") => "Enable mouse in all modes (normal/visual/insert/command)",
+        (Lang::English, "scrolloff") => "Keep 5 visible lines above/below cursor while scrolling",
+        (Lang::English, "laststatus") => "Always display status line even with a single window",
+        (Lang::English, "ignorecase") => "Case-insensitive search by default",
+        (Lang::English, "fileformat") => "Default to Unix LF line endings, avoid CRLF issues",
+        (Lang::English, "cindent") => "C-style auto-indentation (more precise than smartindent)",
+        (Lang::English, "autoread") => "Auto-reload file when modified externally",
+        (Lang::English, "whichwrap") => "Allow cursor keys to wrap across line boundaries",
+        (Lang::English, "matchtime") => "Briefly highlight matching bracket for 0.5 seconds",
+        (Lang::English, "selection") => "Visual selection excludes last char + mouse/key visual mode",
+        (Lang::English, "guioptions") => "Remove right/left scrollbars and bottom toolbar in GVim",
+        (Lang::English, "showtabline") => "Hide tab line when only one tab page exists",
+        _ => "",
+    }
+}
+
 // ── Locale ──────────────────────────────────────────────────
 pub fn locale_title(lang: Lang) -> &'static str {
     match lang {
@@ -400,14 +497,16 @@ pub fn locale_title(lang: Lang) -> &'static str {
 pub fn locale_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
     match lang {
         Lang::Chinese => &[
-            ("配置中文 locale", "生成 zh_CN.UTF-8 locale"),
-            ("安装中文字体", "安装 Noto CJK 字体"),
-            ("安装 Fcitx5 输入法", "安装 fcitx5 + 拼音输入法"),
+            ("1. 配置中文 locale", "生成 zh_CN.UTF-8 locale"),
+            ("2. 安装中文字体", "Noto CJK + 文泉驿微米黑/正黑（兼容 WPS）"),
+            ("3. 安装 Fcitx5 输入法", "拼音输入法，支持 Wayland/X11"),
+            ("4. 清空中文环境", "卸载字体、输入法并删除配置"),
         ],
         Lang::English => &[
-            ("Configure Chinese Locale", "Generate zh_CN.UTF-8 locale"),
-            ("Install Chinese Fonts", "Install Noto CJK fonts"),
-            ("Install Fcitx5 Input", "Install fcitx5 + pinyin input method"),
+            ("1. Configure Chinese Locale", "Generate zh_CN.UTF-8 locale"),
+            ("2. Install Chinese Fonts", "Noto CJK + WQY Micro Hei/Zen Hei (WPS compatible)"),
+            ("3. Install Fcitx5 Input", "Pinyin input, supports Wayland/X11"),
+            ("4. Clear Chinese Config", "Uninstall fonts/input and remove configs"),
         ],
     }
 }
@@ -493,14 +592,14 @@ pub fn nvm_title(lang: Lang) -> &'static str {
 pub fn nvm_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
     match lang {
         Lang::Chinese => &[
-            ("安装 nvm", "Node Version Manager，管理多版本 Node.js"),
-            ("安装 Node.js LTS", "安装最新长期支持版本的 Node.js"),
-            ("配置 Shell 集成", "确保 .bashrc/.zshrc 中包含 nvm 加载脚本"),
+            ("1. 安装 nvm", "Node Version Manager，管理多版本 Node.js"),
+            ("2. 安装 Node.js", "选择并安装最新版或 LTS 长期支持版"),
+            ("3. 清空 nvm", "卸载 nvm 并删除所有 Node.js 版本"),
         ],
         Lang::English => &[
-            ("Install nvm", "Node Version Manager - manage multiple Node.js versions"),
-            ("Install Node.js LTS", "Install latest Long Term Support version of Node.js"),
-            ("Configure Shell Integration", "Ensure nvm load script is in .bashrc/.zshrc"),
+            ("1. Install nvm", "Node Version Manager - manage multiple Node.js versions"),
+            ("2. Install Node.js", "Choose between latest or LTS version"),
+            ("3. Clear nvm", "Uninstall nvm and remove all Node.js versions"),
         ],
     }
 }

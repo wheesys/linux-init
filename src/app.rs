@@ -16,7 +16,9 @@ pub enum Page {
     Tools,
     Vim,
     VimPlugins,
+    VimOptimize,
     Nvm,
+    NvmNodeVersion,
     Locale,
     Status(Box<StatusData>),
 }
@@ -36,6 +38,7 @@ pub struct App {
     pub running: bool,
     pub page: Page,
     pub status_msg: String,
+    pub input_buf: String,
 
     // -- lang select --
     pub lang_index: usize,
@@ -49,6 +52,8 @@ pub struct App {
     pub omz_installed: bool,
     pub omz_configured: bool,
     pub default_shell_set: bool,
+    /// 用户在本次会话中选定的 shell（"zsh"/"bash"），用于 shell 未重启时的配置 fallback
+    pub selected_shell: Option<String>,
     pub shell_theme_index: usize,
     pub selected_theme: String,
     pub plugin_index: usize,
@@ -83,11 +88,14 @@ pub struct App {
     pub vundle_installed: bool,
     pub vim_plugin_index: usize,
     pub selected_vim_plugins: Vec<usize>,
+    pub vim_opt_index: usize,
+    pub selected_vim_opts: Vec<usize>,
 
     // -- nvm --
     pub nvm_index: usize,
     pub nvm_installed: bool,
     pub node_installed: bool,
+    pub nvm_node_index: usize,
 
     // -- locale --
     pub locale_index: usize,
@@ -278,6 +286,7 @@ impl App {
             running: true,
             page,
             status_msg: String::new(),
+            input_buf: String::new(),
 
             lang_index: if lang == Lang::Chinese { 0 } else { 1 },
             menu_index: 0,
@@ -287,6 +296,7 @@ impl App {
             omz_installed,
             omz_configured: omz_installed,
             default_shell_set,
+            selected_shell: None,
             shell_theme_index: 0,
             selected_theme,
             plugin_index: 0,
@@ -316,15 +326,18 @@ impl App {
             vundle_installed,
             vim_plugin_index: 0,
             selected_vim_plugins: vec![],
+            vim_opt_index: 0,
+            selected_vim_opts: vec![],
 
             nvm_index: 0,
             nvm_installed: crate::modules::nvm::is_nvm_installed(),
             node_installed: crate::modules::nvm::installed_node_version().is_some(),
+            nvm_node_index: 0,
 
             locale_index: 0,
-            locale_configured: false,
-            fonts_installed: false,
-            fcitx_installed: false,
+            locale_configured: crate::modules::locale::is_locale_configured(),
+            fonts_installed: crate::modules::locale::is_cjk_fonts_installed(),
+            fcitx_installed: crate::modules::locale::is_fcitx_installed(),
         }
     }
 

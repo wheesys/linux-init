@@ -27,6 +27,14 @@ pub fn install(packages: &[&str]) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn uninstall(packages: &[&str]) -> anyhow::Result<()> {
+    if packages.is_empty() { return Ok(()); }
+    let status = Command::new("sudo")
+        .arg("apt").arg("remove").arg("-y").args(packages).status()?;
+    if !status.success() { anyhow::bail!("apt 卸载失败"); }
+    Ok(())
+}
+
 pub fn is_installed(package: &str) -> bool {
     Command::new("dpkg")
         .arg("-s")
@@ -58,6 +66,8 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
         "docker" => Some("docker.io"),
         "docker-compose" => Some("docker-compose-v2"),
         "noto-fonts-cjk" => Some("fonts-noto-cjk"),
+        "wqy-microhei" => Some("fonts-wqy-microhei"),
+        "wqy-zenhei" => Some("fonts-wqy-zenhei"),
         "fcitx5" => Some("fcitx5"),
         "fcitx5-chinese-addons" => Some("fcitx5-chinese-addons"),
         "fcitx5-configtool" => Some("fcitx5-configtool"),

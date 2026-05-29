@@ -73,6 +73,12 @@ pub fn disable_root_login() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn clear_ssh_server() -> anyhow::Result<()> {
+    let _ = std::process::Command::new("sudo").args(["systemctl", "stop", "sshd"]).status();
+    crate::distro::uninstall_packages(&["openssh-server"])?;
+    Ok(())
+}
+
 pub fn start_service() -> anyhow::Result<()> {
     let status = Command::new("sudo")
         .args(["systemctl", "enable", "--now", "sshd"])

@@ -57,6 +57,15 @@ pub fn install_packages(packages: &[&str]) -> anyhow::Result<()> {
     }
 }
 
+pub fn uninstall_packages(packages: &[&str]) -> anyhow::Result<()> {
+    let distro = detect();
+    match distro.family() {
+        DistroFamily::Arch => pacman::uninstall(packages),
+        DistroFamily::Debian => apt::uninstall(packages),
+        DistroFamily::Unknown => anyhow::bail!("不支持的发行版: {}", distro),
+    }
+}
+
 pub fn is_tool_installed(tool: &str) -> bool {
     package_name(tool)
         .map(|pkg| is_package_installed(pkg))

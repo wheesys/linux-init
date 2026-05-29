@@ -97,7 +97,22 @@ pub const VIM_PLUGINS: &[(&str, &str)] = &[
     ("tagbar", "preservim/tagbar"),
 ];
 
-pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
+pub const VIM_OPTS: &[(&str, &[&str])] = &[
+    ("mouse", &["set mouse=a"]),
+    ("scrolloff", &["set scrolloff=5"]),
+    ("laststatus", &["set laststatus=2"]),
+    ("ignorecase", &["set ignorecase"]),
+    ("fileformat", &["set fileformat=unix"]),
+    ("cindent", &["set cindent"]),
+    ("autoread", &["set autoread"]),
+    ("whichwrap", &["set whichwrap+=<,>,h,l"]),
+    ("matchtime", &["set matchtime=5"]),
+    ("selection", &["set selection=exclusive", "set selectmode=mouse,key"]),
+    ("guioptions", &["set guioptions-=r", "set guioptions-=L", "set guioptions-=b"]),
+    ("showtabline", &["set showtabline=0"]),
+];
+
+pub fn write_vimrc(selected_plugins: &[usize], selected_opts: &[usize]) -> anyhow::Result<()> {
     let home = get_real_home()?;
     let vimrc_path = home.join(".vimrc");
 
@@ -150,6 +165,20 @@ pub fn write_vimrc(selected_plugins: &[usize]) -> anyhow::Result<()> {
         content.push_str("let g:EasyMotion_smartcase = 1\n");
     }
 
+    // --- 优化设置 ---
+    if !selected_opts.is_empty() {
+        content.push_str("\n\" ===== Vim Optimizations =====\n");
+        for &idx in selected_opts {
+            if let Some((key, lines)) = VIM_OPTS.get(idx) {
+                content.push_str(&format!("\" {}\n", key));
+                for line in *lines {
+                    content.push_str(line);
+                    content.push('\n');
+                }
+            }
+        }
+    }
+
     fs::write(&vimrc_path, content)?;
     Ok(())
 }
@@ -195,4 +224,15 @@ pub fn get_installed_plugin_count() -> usize {
                 .count()
         })
         .unwrap_or(0)
+}
+
+pub fn clear_vim() -> anyhow::Result<()> {
+    let home = crate::utils::get_real_home()?;
+    let _ = std::fs::remove_file(home.join(".vimrc"));
+    let vim_dir = home.join(".vim");
+    if vim_dir.exists() {
+        std::fs::remove_dir_all(&vim_dir)?;
+    }
+    crate::distro::uninstall_packages(&["vim"])?;
+    Ok(())
 }

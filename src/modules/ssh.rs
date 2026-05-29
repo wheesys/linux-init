@@ -110,3 +110,13 @@ pub fn has_rsa_key() -> bool {
     };
     home.join(".ssh/id_rsa.pub").exists()
 }
+
+pub fn clear_ssh_keys() -> anyhow::Result<()> {
+    let home = get_real_home()?;
+    let ssh_dir = home.join(".ssh");
+    for prefix in &["id_ed25519", "id_rsa"] {
+        let _ = std::fs::remove_file(ssh_dir.join(prefix));
+        let _ = std::fs::remove_file(ssh_dir.join(format!("{}.pub", prefix)));
+    }
+    Ok(())
+}

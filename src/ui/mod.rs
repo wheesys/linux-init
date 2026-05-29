@@ -86,7 +86,9 @@ pub fn render(frame: &mut Frame, app: &App) {
         Page::Tools => render_tools(frame, app, chunks[0]),
         Page::Vim => render_vim(frame, app, chunks[0]),
         Page::VimPlugins => render_vim_plugins(frame, app, chunks[0]),
+        Page::VimOptimize => render_vim_optimize(frame, app, chunks[0]),
         Page::Nvm => render_nvm(frame, app, chunks[0]),
+        Page::NvmNodeVersion => render_nvm_node(frame, app, chunks[0]),
         Page::Locale => render_locale(frame, app, chunks[0]),
         Page::Status(data) => render_status(frame, app, chunks[0], data),
     }
@@ -100,18 +102,27 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Page::LangSelect => "↑↓ nav  Enter select",
         Page::MainMenu => i18n::statusbar_main(lang),
         Page::Status(_) => i18n::statusbar_status(lang),
-        Page::Tools | Page::VimPlugins => i18n::statusbar_tools(lang),
+        Page::Tools | Page::VimPlugins | Page::VimOptimize | Page::NvmNodeVersion => i18n::statusbar_tools(lang),
         Page::ShellZshPlugins => i18n::statusbar_multi(lang),
         _ => i18n::statusbar_nav(lang),
     };
-    let text = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             format!(" {} | {} ", app.distro, lang),
             Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD),
         ),
         Span::styled(" │ ", Style::default().fg(Color::Reset)),
         Span::styled(keys, Style::default().fg(Color::Reset)),
-    ]);
+    ];
+    // 显示数字输入缓冲
+    if !app.input_buf.is_empty() {
+        spans.push(Span::styled(" │ ", Style::default().fg(Color::Reset)));
+        spans.push(Span::styled(
+            format!(" 输入: {}", app.input_buf),
+            Style::default().fg(C_WARN).add_modifier(Modifier::BOLD),
+        ));
+    }
+    let text = Line::from(spans);
     let bar = Paragraph::new(text);
     frame.render_widget(bar, area);
 }
@@ -487,6 +498,7 @@ fn render_docker(frame: &mut Frame, app: &App, area: Rect) {
         app.compose_installed,
         app.docker_user_configured,
         app.docker_service_running,
+        false,
     ];
     let items = make_list_items(&items, app.docker_index, &statuses);
     let list = List::new(items)
@@ -507,7 +519,7 @@ fn render_ssh(frame: &mut Frame, app: &App, area: Rect) {
         .iter()
         .map(|(n, d)| (n.to_string(), d.to_string()))
         .collect();
-    let statuses = vec![app.ed25519_exists, app.rsa_exists, false];
+    let statuses = vec![app.ed25519_exists, app.rsa_exists, false, false];
     let items = make_list_items(&items, app.ssh_index, &statuses);
     let list = List::new(items)
         .block(block)
@@ -548,6 +560,7 @@ fn render_ssh_server(frame: &mut Frame, app: &App, area: Rect) {
         app.sshd_installed,
         app.sshd_root_disabled,
         app.sshd_running,
+        false,
     ];
     let items = make_list_items(&items, app.ssh_server_index, &statuses);
     let list = List::new(items)
@@ -611,7 +624,7 @@ fn render_vim(frame: &mut Frame, app: &App, area: Rect) {
     let block = styled_block(i18n::vim_title(lang));
     let menu = i18n::vim_menu(lang);
 
-    let statuses = vec![app.vim_installed, app.vundle_installed, false];
+    let statuses = vec![app.vim_installed, app.vundle_installed, false, false, false];
     let items = make_list_items(&menu, app.vim_index, &statuses);
     let list = List::new(items)
         .block(block)
@@ -664,6 +677,50 @@ fn render_vim_plugins(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+// ── Page: Vim Optimize ─────────────────────────────────────
+fn render_vim_optimize(frame: &mut Frame, app: &App, area: Rect) {
+    let lang = app.lang;
+    let block = styled_block(i18n::vim_opt_title(lang));
+    let opts = crate::modules::vim::VIM_OPTS;
+
+    let items: Vec<ListItem> = opts
+        .iter()
+        .enumerate()
+        .map(|(i, (key, _lines))| {
+            let name = i18n::vim_opt_name(lang, key);
+            let desc = i18n::vim_opt_desc(lang, key);
+            let is_selected = app.selected_vim_opts.contains(&i);
+            let marker = if i == app.vim_opt_index {
+                Span::styled("  ▸ ", Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
+            } else {
+                Span::raw("    ")
+            };
+            let check = if is_selected {
+                Span::styled("■ ", Style::default().fg(C_SUCCESS))
+            } else {
+                Span::styled("□ ", Style::default().fg(C_DIM))
+            };
+            let name_s = Span::styled(
+                name,
+                if i == app.vim_opt_index {
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Reset)
+                },
+            );
+            let desc_s = Span::styled(format!("  {}", desc), Style::default().fg(C_DIM));
+            ListItem::new(Line::from(vec![marker, check, name_s, desc_s]))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+
+    let mut state = ListState::default().with_selected(Some(app.vim_opt_index));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
 // ── Page: NVM ───────────────────────────────────────────────
 fn render_nvm(frame: &mut Frame, app: &App, area: Rect) {
     let lang = app.lang;
@@ -684,6 +741,42 @@ fn render_nvm(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+// ── Page: NVM Node Version ──────────────────────────────────
+fn render_nvm_node(frame: &mut Frame, app: &App, area: Rect) {
+    let lang = app.lang;
+    let block = styled_block(i18n::nvm_node_title(lang));
+    let menu = i18n::nvm_node_menu(lang).to_vec();
+
+    let items: Vec<ListItem> = menu
+        .iter()
+        .enumerate()
+        .map(|(i, (name, desc))| {
+            let marker = if i == app.nvm_node_index {
+                Span::styled("  ▸ ", Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
+            } else {
+                Span::raw("    ")
+            };
+            let name_s = Span::styled(
+                *name,
+                if i == app.nvm_node_index {
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Reset)
+                },
+            );
+            let desc_s = Span::styled(format!("  {}", desc), Style::default().fg(C_DIM));
+            ListItem::new(Line::from(vec![marker, name_s, desc_s]))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+
+    let mut state = ListState::default().with_selected(Some(app.nvm_node_index));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
 // ── Page: Locale ───────────────────────────────────────────
 fn render_locale(frame: &mut Frame, app: &App, area: Rect) {
     let lang = app.lang;
@@ -694,7 +787,7 @@ fn render_locale(frame: &mut Frame, app: &App, area: Rect) {
         .iter()
         .map(|(n, d)| (n.to_string(), d.to_string()))
         .collect();
-    let statuses = vec![app.locale_configured, app.fonts_installed, app.fcitx_installed];
+    let statuses = vec![app.locale_configured, app.fonts_installed, app.fcitx_installed, false];
     let items = make_list_items(&items, app.locale_index, &statuses);
     let list = List::new(items)
         .block(block)
@@ -745,9 +838,26 @@ pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option
     }
     let ev = event::read()?;
     if let Event::Key(key) = ev {
-        // Ctrl+C 退出（终端通用方案）
+        // Ctrl+C 退出
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Ok(Some(Action::Quit));
+        }
+        // 数字输入缓冲区
+        match key.code {
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                app.input_buf.push(c);
+                return Ok(None);
+            }
+            KeyCode::Backspace => { app.input_buf.pop(); return Ok(None); }
+            KeyCode::Esc => { app.input_buf.clear(); }
+            KeyCode::Enter if !app.input_buf.is_empty() => {
+                if let Ok(n) = app.input_buf.parse::<usize>() {
+                    if n > 0 { input_number_to_page(app, n - 1); }
+                }
+                app.input_buf.clear();
+                // fall through to handle_key (Enter will trigger action)
+            }
+            _ => {}
         }
         if key.code == KeyCode::Char('q')
             && !matches!(
@@ -756,6 +866,8 @@ pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option
                     | Page::ShellZshPlugins
                     | Page::Tools
                     | Page::VimPlugins
+                    | Page::VimOptimize
+                    | Page::NvmNodeVersion
                     | Page::Status(_)
             )
         {
@@ -764,6 +876,26 @@ pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option
         return handle_key(terminal, app, key);
     }
     Ok(None)
+}
+
+fn input_number_to_page(app: &mut App, idx: usize) {
+    match &app.page {
+        Page::MainMenu => app.menu_index = idx,
+        Page::Shell => app.shell_index = idx,
+        Page::ShellZshTheme => app.shell_theme_index = idx,
+        Page::ShellZshPlugins => app.plugin_index = idx,
+        Page::Docker => app.docker_index = idx,
+        Page::Ssh => app.ssh_index = idx,
+        Page::SshServer => app.ssh_server_index = idx,
+        Page::Tools => app.tool_index = idx,
+        Page::Vim => app.vim_index = idx,
+        Page::VimPlugins => app.vim_plugin_index = idx,
+        Page::VimOptimize => app.vim_opt_index = idx,
+        Page::Nvm => app.nvm_index = idx,
+        Page::NvmNodeVersion => app.nvm_node_index = idx,
+        Page::Locale => app.locale_index = idx,
+        _ => {}
+    }
 }
 
 fn handle_key(
@@ -783,7 +915,9 @@ fn handle_key(
         Page::Tools => handle_tools(app, key),
         Page::Vim => handle_vim(terminal, app, key),
         Page::VimPlugins => handle_vim_plugins(app, key),
+        Page::VimOptimize => handle_vim_optimize(app, key),
         Page::Nvm => handle_nvm(terminal, app, key),
+        Page::NvmNodeVersion => handle_nvm_node(app, key),
         Page::Locale => handle_locale(app, key),
         Page::Status(_) => handle_status(app, key),
     }
@@ -957,6 +1091,7 @@ fn handle_shell_enter(
             match result {
                 Ok(()) => {
                     app.default_shell_set = true;
+                    app.selected_shell = Some("zsh".to_string());
                     app.status_msg = match lang {
                         Lang::Chinese => "✅ zsh 已设为默认 Shell (重新登录生效)".into(),
                         Lang::English => "✅ zsh set as default shell (re-login required)".into(),
@@ -1089,24 +1224,12 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         }
         KeyCode::Up => app.docker_index = app.docker_index.saturating_sub(1),
         KeyCode::Down => app.docker_index = (app.docker_index + 1).min(max - 1),
-        KeyCode::Enter => {
-            // 检查是否已完成，已完成则跳过
+        KeyCode::Enter | KeyCode::Char(_) => {
+            if app.docker_index == 4 { app.status_msg = i18n::msg_installing(lang, "清空 Docker"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::docker::clear_docker())?; Ok(i18n::msg_success(lang, "清空 Docker")) })))); }
             let already_done = match app.docker_index {
-                0 => app.docker_installed,
-                1 => app.compose_installed,
-                2 => app.docker_user_configured,
-                3 => app.docker_service_running,
-                _ => false,
+                0 => app.docker_installed, 1 => app.compose_installed, 2 => app.docker_user_configured, 3 => app.docker_service_running, _ => false,
             };
-            
-            if already_done {
-                app.status_msg = match lang {
-                    Lang::Chinese => "✅ 已完成，无需重复操作".into(),
-                    Lang::English => "✅ Already completed, no need to repeat".into(),
-                };
-                return Ok(None);
-            }
-            
+            if already_done { app.status_msg = match lang { Lang::Chinese => "✅ 已完成，无需重复操作".into(), Lang::English => "✅ Already completed, no need to repeat".into() }; return Ok(None); }
             let (before, after): (&str, String) = match (lang, app.docker_index) {
                 (Lang::Chinese, 0) => ("正在安装 Docker...", "✅ Docker 安装成功".into()),
                 (Lang::English, 0) => ("Installing Docker...", "✅ Docker installed".into()),
@@ -1121,13 +1244,7 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
             app.status_msg = before.into();
             let idx = app.docker_index;
             return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                run_in_terminal(terminal, || match idx {
-                    0 => crate::modules::docker::install_docker(),
-                    1 => crate::modules::docker::install_compose(),
-                    2 => crate::modules::docker::add_user_to_docker_group(),
-                    3 => crate::modules::docker::start_docker_service(),
-                    _ => Ok(()),
-                })?;
+                run_in_terminal(terminal, || match idx { 0 => crate::modules::docker::install_docker(), 1 => crate::modules::docker::install_compose(), 2 => crate::modules::docker::add_user_to_docker_group(), 3 => crate::modules::docker::start_docker_service(), _ => Ok(()) })?;
                 Ok(after)
             }))));
         }
@@ -1151,7 +1268,7 @@ fn handle_ssh(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
         }
         KeyCode::Up => app.ssh_index = app.ssh_index.saturating_sub(1),
         KeyCode::Down => app.ssh_index = (app.ssh_index + 1).min(max - 1),
-        KeyCode::Enter => {
+        KeyCode::Enter | KeyCode::Char(_) => {
             let email = format!(
                 "{}@localhost",
                 std::env::var("USER").unwrap_or_else(|_| "user".into())
@@ -1207,6 +1324,13 @@ fn handle_ssh(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
                     Ok(pubkey) => app.last_pubkey = pubkey,
                     Err(e) => app.status_msg = i18n::msg_fail(lang, "read key", &e.to_string()),
                 },
+                3 => {
+                    app.status_msg = i18n::msg_installing(lang, "清空 SSH 密钥");
+                    match crate::modules::ssh::clear_ssh_keys() {
+                        Ok(()) => { app.ed25519_exists = false; app.rsa_exists = false; app.status_msg = i18n::msg_success(lang, "清空 SSH 密钥"); }
+                        Err(e) => app.status_msg = i18n::msg_fail(lang, "clear SSH keys", &e.to_string()),
+                    }
+                }
                 _ => {}
             }
         }
@@ -1227,13 +1351,10 @@ fn handle_ssh_server(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Acti
         KeyCode::Down => {
             app.ssh_server_index = (app.ssh_server_index + 1).min(max - 1)
         }
-        KeyCode::Enter => {
-            // 检查是否已完成，已完成则跳过
+        KeyCode::Enter | KeyCode::Char(_) => {
+            if app.ssh_server_index == 3 { app.status_msg = i18n::msg_installing(lang, "清空 SSH 服务"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::ssh_server::clear_ssh_server())?; Ok(i18n::msg_success(lang, "清空 SSH 服务")) })))); }
             let already_done = match app.ssh_server_index {
-                0 => app.sshd_installed,
-                1 => app.sshd_root_disabled,
-                2 => app.sshd_running,
-                _ => false,
+                0 => app.sshd_installed, 1 => app.sshd_root_disabled, 2 => app.sshd_running, _ => false,
             };
             
             if already_done {
@@ -1337,20 +1458,21 @@ fn handle_tools(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> 
             app.status_msg = i18n::msg_installing(lang, &format!("{} tools", count));
             let selected_owned: Vec<String> =
                 selected.iter().map(|s| s.to_string()).collect();
+            let selected_shell = app.selected_shell.clone();
             return Ok(Some(Action::Execute(Box::new(move |terminal| {
                 run_in_terminal(terminal, || {
                     let refs: Vec<&str> =
                         selected_owned.iter().map(|s| s.as_str()).collect();
                     crate::modules::tools::install_tools(&refs)?;
-                    
+
                     // 配置命令别名
-                    crate::modules::tools::configure_aliases(&refs)?;
-                    
+                    crate::modules::tools::configure_aliases(&refs, selected_shell.as_deref())?;
+
                     // 如果安装了 direnv，配置 hook
                     if refs.contains(&"direnv") {
-                        crate::modules::tools::configure_direnv_hook()?;
+                        crate::modules::tools::configure_direnv_hook(selected_shell.as_deref())?;
                     }
-                    
+
                     Ok(())
                 })?;
                 Ok(match lang {
@@ -1434,6 +1556,17 @@ fn handle_vim(
                     app.page = Page::VimPlugins;
                     app.vim_plugin_index = 0;
                 }
+                3 => {
+                    if !app.vim_installed {
+                        app.status_msg = match lang {
+                            Lang::Chinese => "❌ 请先安装 Vim".into(),
+                            Lang::English => "❌ Please install Vim first".into(),
+                        };
+                        return Ok(None);
+                    }
+                    app.page = Page::VimOptimize;
+                    app.vim_opt_index = 0;
+                }
                 _ => {}
             }
         }
@@ -1449,7 +1582,7 @@ fn handle_vim_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Act
         KeyCode::Esc | KeyCode::Backspace => {
             // Save on exit
             if !app.selected_vim_plugins.is_empty() {
-                match crate::modules::vim::write_vimrc(&app.selected_vim_plugins) {
+                match crate::modules::vim::write_vimrc(&app.selected_vim_plugins, &app.selected_vim_opts) {
                     Ok(()) => {
                         app.status_msg = match lang {
                             Lang::Chinese => format!(
@@ -1482,7 +1615,7 @@ fn handle_vim_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Act
         }
         KeyCode::Enter => {
             if !app.selected_vim_plugins.is_empty() {
-                match crate::modules::vim::write_vimrc(&app.selected_vim_plugins) {
+                match crate::modules::vim::write_vimrc(&app.selected_vim_plugins, &app.selected_vim_opts) {
                     Ok(()) => {
                         app.status_msg = match lang {
                             Lang::Chinese => format!(
@@ -1505,6 +1638,64 @@ fn handle_vim_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Act
     Ok(None)
 }
 
+fn handle_vim_optimize(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+    let lang = app.lang;
+    let opt_count = crate::modules::vim::VIM_OPTS.len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            if !app.selected_vim_opts.is_empty() || !app.selected_vim_plugins.is_empty() {
+                crate::modules::vim::write_vimrc(&app.selected_vim_plugins, &app.selected_vim_opts)?;
+                app.status_msg = match lang {
+                    Lang::Chinese => format!(
+                        "✅ 已写入 {} 个优化设置 + {} 个插件到 .vimrc",
+                        app.selected_vim_opts.len(),
+                        app.selected_vim_plugins.len()
+                    ),
+                    Lang::English => format!(
+                        "✅ Written {} optimizations + {} plugins to .vimrc",
+                        app.selected_vim_opts.len(),
+                        app.selected_vim_plugins.len()
+                    ),
+                };
+            }
+            app.page = Page::Vim;
+        }
+        KeyCode::Up => app.vim_opt_index = app.vim_opt_index.saturating_sub(1),
+        KeyCode::Down => {
+            app.vim_opt_index = (app.vim_opt_index + 1).min(opt_count - 1)
+        }
+        KeyCode::Char(' ') => {
+            let idx = app.vim_opt_index;
+            if let Some(pos) = app.selected_vim_opts.iter().position(|&i| i == idx) {
+                app.selected_vim_opts.remove(pos);
+            } else {
+                app.selected_vim_opts.push(idx);
+            }
+            app.vim_opt_index = (app.vim_opt_index + 1).min(opt_count - 1);
+        }
+        KeyCode::Enter => {
+            if !app.selected_vim_opts.is_empty() || !app.selected_vim_plugins.is_empty() {
+                crate::modules::vim::write_vimrc(&app.selected_vim_plugins, &app.selected_vim_opts)?;
+                app.status_msg = match lang {
+                    Lang::Chinese => format!(
+                        "✅ 已写入 {} 个优化设置 + {} 个插件到 .vimrc",
+                        app.selected_vim_opts.len(),
+                        app.selected_vim_plugins.len()
+                    ),
+                    Lang::English => format!(
+                        "✅ Written {} optimizations + {} plugins to .vimrc",
+                        app.selected_vim_opts.len(),
+                        app.selected_vim_plugins.len()
+                    ),
+                };
+            }
+            app.page = Page::Vim;
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
 fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
     let lang = app.lang;
     let max = i18n::nvm_menu(lang).len();
@@ -1515,7 +1706,7 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
         }
         KeyCode::Up => app.nvm_index = app.nvm_index.saturating_sub(1),
         KeyCode::Down => app.nvm_index = (app.nvm_index + 1).min(max - 1),
-        KeyCode::Enter => match app.nvm_index {
+        KeyCode::Enter | KeyCode::Char(_) => match app.nvm_index {
             0 => {
                 if app.nvm_installed {
                     app.status_msg = match lang {
@@ -1540,32 +1731,50 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
                 }
                 if app.node_installed {
                     app.status_msg = match lang {
-                        Lang::Chinese => "✅ Node.js LTS 已安装，无需重复操作".into(),
-                        Lang::English => "✅ Node.js LTS already installed, no need to repeat".into(),
+                        Lang::Chinese => "✅ Node.js 已安装，无需重复操作".into(),
+                        Lang::English => "✅ Node.js already installed, no need to repeat".into(),
                     };
                     return Ok(None);
                 }
-                app.status_msg = i18n::msg_installing(lang, "Node.js LTS");
-                return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                    run_in_terminal(terminal, || crate::modules::nvm::install_node_lts())?;
-                    Ok(i18n::msg_success(lang, "Node.js LTS"))
-                }))));
+                app.page = Page::NvmNodeVersion;
+                app.nvm_node_index = 0;
             }
             2 => {
-                app.status_msg = match lang {
-                    Lang::Chinese => "正在配置 Shell 集成...".into(),
-                    Lang::English => "Configuring shell integration...".into(),
-                };
+                app.status_msg = i18n::msg_installing(lang, "清空 nvm");
                 return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                    run_in_terminal(terminal, || crate::modules::nvm::ensure_shell_integration())?;
-                    Ok(match lang {
-                        Lang::Chinese => "✅ Shell 集成配置完成 (重新打开终端生效)".into(),
-                        Lang::English => "✅ Shell integration configured (reopen terminal to apply)".into(),
-                    })
+                    run_in_terminal(terminal, || crate::modules::nvm::clear_nvm())?;
+                    Ok(i18n::msg_success(lang, "清空 nvm"))
                 }))));
             }
             _ => {}
         },
+        _ => {}
+    }
+    Ok(None)
+}
+
+fn handle_nvm_node(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+    let lang = app.lang;
+    let max = i18n::nvm_node_menu(lang).len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            app.page = Page::Nvm;
+        }
+        KeyCode::Up => app.nvm_node_index = app.nvm_node_index.saturating_sub(1),
+        KeyCode::Down => app.nvm_node_index = (app.nvm_node_index + 1).min(max - 1),
+        KeyCode::Enter => {
+            let install_fn: fn() -> anyhow::Result<()> = match app.nvm_node_index {
+                0 => crate::modules::nvm::install_node_latest,
+                1 => crate::modules::nvm::install_node_lts,
+                _ => return Ok(None),
+            };
+            let label = if app.nvm_node_index == 0 { "Node.js 最新版" } else { "Node.js LTS" };
+            app.status_msg = i18n::msg_installing(lang, label);
+            return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                run_in_terminal(terminal, install_fn)?;
+                Ok(i18n::msg_success(lang, label))
+            }))));
+        }
         _ => {}
     }
     Ok(None)
@@ -1581,23 +1790,10 @@ fn handle_locale(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         }
         KeyCode::Up => app.locale_index = app.locale_index.saturating_sub(1),
         KeyCode::Down => app.locale_index = (app.locale_index + 1).min(max - 1),
-        KeyCode::Enter => {
-            // 检查是否已完成，已完成则跳过
-            let already_done = match app.locale_index {
-                0 => app.locale_configured,
-                1 => app.fonts_installed,
-                2 => app.fcitx_installed,
-                _ => false,
-            };
-            
-            if already_done {
-                app.status_msg = match lang {
-                    Lang::Chinese => "✅ 已完成，无需重复操作".into(),
-                    Lang::English => "✅ Already completed, no need to repeat".into(),
-                };
-                return Ok(None);
-            }
-            
+        KeyCode::Enter | KeyCode::Char(_) => {
+            if app.locale_index == 3 { app.status_msg = i18n::msg_installing(lang, "清空中文环境"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::locale::clear_locale())?; Ok(i18n::msg_success(lang, "清空中文环境")) })))); }
+            let already_done = match app.locale_index { 0 => app.locale_configured, 1 => app.fonts_installed, 2 => app.fcitx_installed, _ => false };
+            if already_done { app.status_msg = match lang { Lang::Chinese => "✅ 已完成，无需重复操作".into(), Lang::English => "✅ Already completed, no need to repeat".into() }; return Ok(None); }
             let (before, after): (&str, String) = match (lang, app.locale_index) {
                 (Lang::Chinese, 0) => ("正在配置中文 locale...", "✅ 中文 locale 配置成功".into()),
                 (Lang::English, 0) => ("Configuring Chinese locale...", "✅ Chinese locale configured".into()),
@@ -1610,12 +1806,7 @@ fn handle_locale(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
             app.status_msg = before.into();
             let idx = app.locale_index;
             return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                run_in_terminal(terminal, || match idx {
-                    0 => crate::modules::locale::configure_locale(),
-                    1 => crate::modules::locale::install_cjk_fonts(),
-                    2 => crate::modules::locale::install_fcitx5(),
-                    _ => Ok(()),
-                })?;
+                run_in_terminal(terminal, || match idx { 0 => crate::modules::locale::configure_locale(), 1 => crate::modules::locale::install_cjk_fonts(), 2 => crate::modules::locale::install_fcitx5(), _ => Ok(()) })?;
                 Ok(after)
             }))));
         }

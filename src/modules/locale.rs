@@ -74,8 +74,25 @@ fn configure_locale_debian() -> anyhow::Result<()> {
     configure_locale_arch()
 }
 
+/// 需要安装的中文字体包列表
+/// - noto-fonts-cjk: Google Noto CJK 全系列（中日韩统一覆盖）
+/// - wqy-microhei: 文泉驿微米黑（WPS Office 依赖，微软雅黑替代）
+/// - wqy-zenhei: 文泉驿正黑（补充字体，宋体风格）
+const CJK_FONT_PACKAGES: &[&str] = &["noto-fonts-cjk", "wqy-microhei", "wqy-zenhei"];
+
 pub fn install_cjk_fonts() -> anyhow::Result<()> {
-    distro::install_packages(&["noto-fonts-cjk"])?;
+    // 检查是否已有中文字体
+    if is_cjk_fonts_installed() {
+        return Ok(());
+    }
+
+    // 逐包安装，忽略已安装的
+    for pkg in CJK_FONT_PACKAGES {
+        if distro::is_package_installed(pkg) {
+            continue;
+        }
+        distro::install_packages(&[pkg])?;
+    }
     Ok(())
 }
 
@@ -83,19 +100,31 @@ pub fn install_fcitx5() -> anyhow::Result<()> {
     distro::install_packages(&["fcitx5", "fcitx5-chinese-addons", "fcitx5-configtool"])?;
 
     let home = get_real_home()?;
-    let profile_path = home.join(".pam_environment");
 
-    let env_vars = r#"GTK_IM_MODULE=fcitx5
-QT_IM_MODULE=fcitx5
-XMODIFIERS=@im=fcitx
-SDL_IM_MODULE=fcitx
+    // X11 / XWayland: .pam_environment（登录时 source，对 X11 会话生效）
+    let env_vars = r#"GTK_IM_MODULE_DEFAULT=fcitx5
+QT_IM_MODULE_DEFAULT=fcitx5
+XMODIFIERS_DEFAULT=@im=fcitx
+SDL_IM_MODULE_DEFAULT=fcitx
 "#;
 
-    fs::write(&profile_path, env_vars)?;
+    let pam_path = home.join(".pam_environment");
+    fs::write(&pam_path, env_vars)?;
 
+    // Wayland: ~/.config/environment.d/im.conf（Wayland 合成器读取）
+    let env_dir = home.join(".config/environment.d");
+    fs::create_dir_all(&env_dir)?;
+    let wayland_conf = env_dir.join("fcitx5.conf");
+    fs::write(&wayland_conf, r#"INPUT_METHOD=fcitx5
+GTK_IM_MODULE=fcitx5
+QT_IM_MODULE=fcitx5
+XMODIFIERS=@im=fcitx5
+"#)?;
+
+    // 自启动：.xprofile（X11）和 .config/autostart（XDG 兼容/Wayland）
     let xprofile = home.join(".xprofile");
     if !xprofile.exists() {
-        fs::write(&xprofile, "fcitx5 &\n")?;
+        fs::write(&xprofile, "fcitx5 -d &\n")?;
     }
 
     Ok(())
@@ -112,6 +141,29 @@ pub fn is_locale_configured() -> bool {
         .unwrap_or(false)
 }
 
+/// 检查是否有中文字体已安装（通过 fc-list 查询）
+pub fn is_cjk_fonts_installed() -> bool {
+    Command::new("fc-list")
+        .arg(":lang=zh")
+        .output()
+        .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+        .unwrap_or(false)
+}
+
 pub fn is_fcitx_installed() -> bool {
     distro::is_package_installed("fcitx5")
+}
+
+pub fn clear_locale() -> anyhow::Result<()> {
+    use crate::utils::get_real_home;
+    // 卸载字体和输入法
+    crate::distro::uninstall_packages(&["noto-fonts-cjk", "wqy-microhei", "wqy-zenhei", "fcitx5", "fcitx5-chinese-addons", "fcitx5-configtool"])?;
+    // 删除配置文件
+    if let Ok(home) = get_real_home() {
+        let _ = std::fs::remove_file(home.join(".pam_environment"));
+        let _ = std::fs::remove_file(home.join(".xprofile"));
+        let env_conf = home.join(".config/environment.d/fcitx5.conf");
+        let _ = std::fs::remove_file(&env_conf);
+    }
+    Ok(())
 }

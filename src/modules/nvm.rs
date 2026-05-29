@@ -78,10 +78,39 @@ pub fn install_nvm() -> anyhow::Result<()> {
         anyhow::bail!("NVM 安装失败");
     }
 
-    // 安装成功后自动配置 shell 集成
+    // 安装成功后自动配置 shell 集成（安装时无会话选定 shell，依赖 $SHELL）
     log.log("Auto-configuring shell integration...")?;
-    ensure_shell_integration()?;
+    ensure_shell_integration(None)?;
 
+    Ok(())
+}
+
+pub fn install_node_latest() -> anyhow::Result<()> {
+    let nvm_sh = nvm_dir().join("nvm.sh");
+    if !nvm_sh.exists() {
+        anyhow::bail!("nvm 未安装");
+    }
+
+    let mut log = DownloadLogger::new("node-latest-install.log")?;
+
+    let script = format!(
+        "source '{}' && nvm install node && nvm alias default node",
+        nvm_sh.display()
+    );
+
+    log.log("Installing Node.js latest")?;
+
+    let status = if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        log.run_as_user("nvm install node", &sudo_user, "bash", &["-c", &script])?
+    } else {
+        log.run_download("nvm install node", "bash", &["-c", &script])?
+    };
+
+    log.finish(status.success());
+
+    if !status.success() {
+        anyhow::bail!("Node.js 最新版安装失败");
+    }
     Ok(())
 }
 
@@ -135,7 +164,7 @@ pub fn installed_node_version() -> Option<String> {
     }
 }
 
-pub fn ensure_shell_integration() -> anyhow::Result<()> {
+pub fn ensure_shell_integration(selected_shell: Option<&str>) -> anyhow::Result<()> {
     let home = get_real_home()?;
     let nvm_sh = nvm_dir().join("nvm.sh");
 
@@ -149,19 +178,43 @@ export NVM_DIR="$HOME/.nvm"
         nvm_sh.display()
     );
 
-    for rc in [".bashrc", ".zshrc"] {
-        let path = home.join(rc);
-        if !path.exists() {
-            continue;
-        }
-        let content = std::fs::read_to_string(&path).unwrap_or_default();
-        if content.contains("NVM_DIR") {
-            continue;
-        }
-        let mut f = std::fs::OpenOptions::new().append(true).open(&path)?;
-        use std::io::Write;
-        f.write_all(snippet.as_bytes())?;
-    }
+    let target = crate::modules::tools::resolve_shell_for_config(selected_shell);
+    let rc_file = match target.as_deref() {
+        Some("zsh") => ".zshrc",
+        _ => ".bashrc",
+    };
 
+    let path = home.join(rc_file);
+    if !path.exists() {
+        return Ok(());
+    }
+    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    if content.contains("NVM_DIR") {
+        return Ok(());
+    }
+    let mut f = std::fs::OpenOptions::new().append(true).open(&path)?;
+    use std::io::Write;
+    f.write_all(snippet.as_bytes())?;
+
+    Ok(())
+}
+
+pub fn clear_nvm() -> anyhow::Result<()> {
+    let home = crate::utils::get_real_home()?;
+    let nvm_dir = home.join(".nvm");
+    if nvm_dir.exists() {
+        std::fs::remove_dir_all(&nvm_dir)?;
+    }
+    for rc in &[".bashrc", ".zshrc"] {
+        let path = home.join(rc);
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let filtered: Vec<&str> = content.lines()
+                    .filter(|l| !l.contains("NVM_DIR") && !l.contains("nvm.sh"))
+                    .collect();
+                let _ = std::fs::write(&path, filtered.join("\n") + "\n");
+            }
+        }
+    }
     Ok(())
 }
