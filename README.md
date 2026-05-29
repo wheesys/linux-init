@@ -57,8 +57,8 @@ sudo dpkg -i linux-init_*.deb
 主菜单
 ├── 🐚 Shell 配置
 │   ├── 安装 Zsh
-│   ├── 安装 Oh My Zsh
-│   ├── 选择主题 (13+ 内置主题)
+│   ├── 安装 Oh My Zsh (支持 GitHub/Gitee 镜像自动回退)
+│   ├── 选择主题 (13+ 内置主题，带彩色预览)
 │   ├── 选择插件 (14+ 可选插件)
 │   └── 设为默认 Shell
 ├── 🐳 Docker 安装

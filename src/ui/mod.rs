@@ -371,21 +371,52 @@ fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
     let preview_title = format!("{}  —  Preview", selected_theme);
     let preview_block = styled_block(&preview_title);
 
+    // Helper function to convert color name to ratatui Color
+    fn color_from_str(color: &str) -> (Option<Color>, Option<Color>) {
+        match color {
+            "black_bg" => (None, Some(Color::Black)),
+            "blue_bg" => (Some(Color::Black), Some(Color::Blue)),
+            "green_bg" => (Some(Color::Black), Some(Color::Green)),
+            "yellow_bg" => (Some(Color::Black), Some(Color::Yellow)),
+            "cyan_bg" => (Some(Color::Black), Some(Color::Cyan)),
+            "green_fg" => (Some(Color::Green), None),
+            "white_fg" => (Some(Color::White), None),
+            "green" => (Some(Color::Green), None),
+            "cyan" => (Some(Color::Cyan), None),
+            "blue" => (Some(Color::Blue), None),
+            "red" => (Some(Color::Red), None),
+            "yellow" => (Some(Color::Yellow), None),
+            "white" => (Some(Color::White), None),
+            "dim" => (Some(Color::DarkGray), None),
+            _ => (Some(Color::Reset), None),
+        }
+    }
+
     let preview_lines: Vec<Line> = THEME_PREVIEWS
         .iter()
         .find(|(name, _)| *name == selected_theme)
         .map(|(_, lines)| {
             lines
                 .iter()
-                .enumerate()
-                .map(|(i, line)| {
-                    if i == 0 || (!line.is_empty() && i <= 2) {
-                        // Prompt lines in cyan
-                        Line::styled(*line, Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
-                    } else {
-                        // Description lines in dim
-                        Line::styled(*line, Style::default().fg(C_DIM))
-                    }
+                .map(|line_segments| {
+                    let spans: Vec<Span> = line_segments
+                        .iter()
+                        .map(|(text, color_name)| {
+                            let (fg, bg) = color_from_str(color_name);
+                            let mut style = Style::default();
+                            if let Some(fg_color) = fg {
+                                style = style.fg(fg_color);
+                            }
+                            if let Some(bg_color) = bg {
+                                style = style.bg(bg_color);
+                            }
+                            if *color_name != "dim" {
+                                style = style.add_modifier(Modifier::BOLD);
+                            }
+                            Span::styled(*text, style)
+                        })
+                        .collect();
+                    Line::from(spans)
                 })
                 .collect()
         })

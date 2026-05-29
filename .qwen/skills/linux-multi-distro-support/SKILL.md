@@ -365,6 +365,60 @@ These work identically on all target distros:
 - `ssh-keygen` (same on both)
 - `locale-gen` (same on both, after editing locale.gen)
 
+## Mirror Fallback for Network Downloads
+
+Users in China or with unstable GitHub connections will experience download failures. Always provide Gitee as a fallback mirror for all GitHub downloads. The pattern applies to: oh-my-zsh install script, vundle git clone, oh-my-zsh third-party plugins, and nvm install script.
+
+### Pattern
+
+```rust
+let sources = [
+    ("GitHub", "https://raw.githubusercontent.com/..."),
+    ("Gitee",  "https://gitee.com/mirrors/..."),
+];
+
+let mut success = false;
+for (name, url) in &sources {
+    // 1. Check network
+    if log.check_network(url).is_err() { continue; }
+    // 2. Try download
+    let status = log.run_download(desc, "curl", &["-fSL", "--max-time", "60", "-o", output, url])?;
+    if status.success() { success = true; break; }
+    // 3. Clean up partial results before retry
+    let _ = std::fs::remove_file(output);
+}
+if !success { anyhow::bail!("All download sources failed"); }
+```
+
+### Known Gitee Mirrors
+
+| GitHub Repo | Gitee Mirror |
+|------------|-------------|
+| ohmyzsh/ohmyzsh install.sh | gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh |
+| nvm-sh/nvm install.sh | gitee.com/mirrors/nvm/raw/v0.40.1/install.sh |
+| VundleVim/Vundle.vim | gitee.com/mirrors/Vundle.vim.git |
+| zsh-users/zsh-autosuggestions | gitee.com/mirrors/zsh-autosuggestions.git |
+| zsh-users/zsh-syntax-highlighting | gitee.com/mirrors/zsh-syntax-highlighting.git |
+| zsh-users/zsh-completions | gitee.com/mirrors/zsh-completions.git |
+
+**Note**: Not all GitHub repos have Gitee mirrors. Check before adding.
+
+### For git clone operations
+
+Same pattern but with git:
+```rust
+let sources = [
+    ("GitHub", "https://github.com/user/repo.git"),
+    ("Gitee",  "https://gitee.com/mirrors/repo.git"),
+];
+
+for (name, repo_url) in &sources {
+    let status = log.run_download(desc, "git", &["clone", repo_url, target_dir])?;
+    if status.success() { break; }
+    let _ = std::fs::remove_dir_all(target_dir);  // Clean partial clone
+}
+```
+
 ## Network Connectivity Checks
 
 **NEVER use the `timeout` command** — it's not available on minimal Ubuntu installations. Use curl's built-in `--max-time` parameter instead:

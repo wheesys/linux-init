@@ -656,6 +656,184 @@ match ping {
 }
 ```
 
+## Mirror Fallback Pattern (GitHub → Gitee)
+
+When downloads depend on GitHub, users behind the Great Firewall or with unstable international connections will experience hangs and timeouts. Always provide Gitee as a fallback mirror:
+
+### Core Idea
+Define a list of (name, check_url, download_url) sources. Try each in order — if network check fails or download fails, move to the next source.
+
+### For curl Downloads (install scripts)
+
+```rust
+let sources = [
+    ("GitHub", "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"),
+    ("Gitee",  "https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh"),
+];
+
+let tmp_script = "/tmp/install.sh";
+let mut downloaded = false;
+
+for (name, url) in &sources {
+    log.log(&format!("Trying {} mirror: {}", name, url))?;
+
+    if log.check_network(url).is_err() {
+        log.log(&format!("{} network check failed, trying next...", name))?;
+        continue;
+    }
+
+    let status = log.run_download(
+        &format!("Download from {}", name),
+        "curl",
+        &["-fSL", "--max-time", "60", "-o", tmp_script, url],
+    )?;
+
+    if status.success() {
+        downloaded = true;
+        break;
+    }
+    log.log(&format!("{} download failed, trying next...", name))?;
+}
+
+if !downloaded {
+    anyhow::bail!("所有下载源均失败，请检查网络连接");
+}
+```
+
+### For git clone Operations
+
+```rust
+let sources = [
+    ("GitHub", "https://github.com/zsh-users/zsh-autosuggestions.git"),
+    ("Gitee",  "https://gitee.com/mirrors/zsh-autosuggestions.git"),
+];
+
+let mut cloned = false;
+for (name, repo_url) in &sources {
+    log.log(&format!("Trying {} mirror...", name))?;
+
+    if log.check_network(repo_url).is_err() {
+        continue;
+    }
+
+    let status = log.run_as_user(
+        &format!("Clone from {}", name),
+        &sudo_user, "git",
+        &["clone", repo_url, target_dir.to_str().unwrap()],
+    )?;
+
+    if status.success() {
+        cloned = true;
+        break;
+    }
+    log.log(&format!("{} clone failed, trying next...", name))?;
+    // Clean up partial clone before retry
+    let _ = std::fs::remove_dir_all(&target_dir);
+}
+
+if !cloned {
+    anyhow::bail!("下载失败，所有镜像均无法访问");
+}
+```
+
+### Key Gotchas
+
+1. **Clean up partial clones** — If git clone starts but fails mid-way, the target directory may exist but be incomplete. Always `remove_dir_all` before retrying with the next mirror.
+
+2. **Network check URL vs download URL** — For GitHub, use a web page URL (e.g., `https://github.com/user/repo/blob/master/file`) for the network check since it returns HTTP 200. Don't use `raw.githubusercontent.com` with `--head` — it returns 301 redirects.
+
+3. **Not all repos have Gitee mirrors** — Check if the mirror actually exists before adding it. Popular repos (oh-my-zsh, nvm, zsh-autosuggestions, zsh-syntax-highlighting) usually have mirrors at `gitee.com/mirrors/`.
+
+4. **Log each attempt** — Users debugging failures need to know which mirrors were tried and why they failed. The DownloadLogger pattern handles this automatically.
+
+## Split-View Preview Panel (Left List + Right Preview)
+
+For TUI pages where selecting an item should show a preview (e.g., theme selection, file browser, config preview), use a horizontal split layout:
+
+```rust
+fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
+    // Split horizontally: 55% list, 45% preview
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
+        .split(area);
+
+    // Left: scrollable list with state
+    let list_block = styled_block("Select Theme");
+    let items: Vec<ListItem> = THEMES.iter().enumerate().map(|(i, (name, _))| {
+        // ... render each item with marker, check mark, name, description
+    }).collect();
+    let list = List::new(items).block(list_block)
+        .highlight_style(Style::default().fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD | Modifier::REVERSED));
+    let mut state = ListState::default().with_selected(Some(app.theme_index));
+    frame.render_stateful_widget(list, chunks[0], &mut state);
+
+    // Right: preview panel showing selected item's effect
+    let selected = THEMES.get(app.theme_index).map(|(n, _)| *n).unwrap_or("default");
+    let preview_title = format!("{}  —  Preview", selected);  // Must bind before styled_block
+    let preview_block = styled_block(&preview_title);
+
+    let preview_lines: Vec<Line> = get_preview_for(selected)
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            if i <= 2 {
+                // First few lines: prompt simulation in bold cyan
+                Line::styled(*line, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            } else {
+                // Rest: description in dim
+                Line::styled(*line, Style::default().fg(Color::DarkGray))
+            }
+        })
+        .collect();
+
+    let preview = Paragraph::new(preview_lines)
+        .block(preview_block)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(preview, chunks[1]);
+}
+```
+
+### Preview Data Pattern
+
+Store preview data as a const array alongside your items:
+
+```rust
+pub const THEMES: &[(&str, &str)] = &[
+    ("robbyrussell", ""),
+    ("agnoster", ""),
+    // ...
+];
+
+pub const THEME_PREVIEWS: &[(&str, &[&str])] = &[
+    ("robbyrussell", &[
+        "➜  ~ git:(master) ✗",
+        "",
+        "Single-line prompt with path and git status",
+    ]),
+    ("agnoster", &[
+        " user@host  master ±  ~/projects ",
+        "",
+        "Powerline segment style, compact info-dense",
+    ]),
+    // ...
+];
+```
+
+### Gotcha: Temporary Lifetime
+
+The `styled_block` function returns `Block<'_>` borrowing its argument. You MUST bind the `format!()` result to a `let` before passing it:
+
+```rust
+// WRONG — temporary dropped while borrowed
+let block = styled_block(&format!("{} — Preview", selected));
+
+// CORRECT — let binding extends lifetime
+let title = format!("{} — Preview", selected);
+let block = styled_block(&title);
+```
+
 ## Installation Logging Pattern
 
 For operations that may fail silently or hang, add file-based logging so users can debug:
