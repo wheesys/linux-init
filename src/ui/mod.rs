@@ -1341,11 +1341,21 @@ fn handle_tools(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> 
                 run_in_terminal(terminal, || {
                     let refs: Vec<&str> =
                         selected_owned.iter().map(|s| s.as_str()).collect();
-                    crate::modules::tools::install_tools(&refs)
+                    crate::modules::tools::install_tools(&refs)?;
+                    
+                    // 配置命令别名
+                    crate::modules::tools::configure_aliases(&refs)?;
+                    
+                    // 如果安装了 direnv，配置 hook
+                    if refs.contains(&"direnv") {
+                        crate::modules::tools::configure_direnv_hook()?;
+                    }
+                    
+                    Ok(())
                 })?;
                 Ok(match lang {
-                    Lang::Chinese => format!("✅ {} 个工具安装成功", count),
-                    Lang::English => format!("✅ {} tools installed", count),
+                    Lang::Chinese => format!("✅ {} 个工具安装成功，别名已配置", count),
+                    Lang::English => format!("✅ {} tools installed, aliases configured", count),
                 })
             }))));
         }

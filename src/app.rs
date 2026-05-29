@@ -216,6 +216,11 @@ pub const TOOLS: &[(&str, &str, &str)] = &[
     ("fd", "CLI 增强", ""),
     ("bat", "CLI 增强", ""),
     ("eza", "CLI 增强", ""),
+    ("trash-cli", "CLI 增强", ""),
+    ("procs", "CLI 增强", ""),
+    ("dust", "CLI 增强", ""),
+    ("duf", "CLI 增强", ""),
+    ("direnv", "开发工具", ""),
 ];
 
 impl App {

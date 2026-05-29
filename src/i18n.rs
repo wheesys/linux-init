@@ -281,6 +281,11 @@ pub fn tool_desc(lang: Lang, name: &str) -> &'static str {
         (Lang::Chinese, "fd") => "更友好的 find 替代",
         (Lang::Chinese, "bat") => "带语法高亮的 cat 替代",
         (Lang::Chinese, "eza") => "现代化的 ls 替代",
+        (Lang::Chinese, "trash-cli") => "安全的 rm 替代（移到回收站）",
+        (Lang::Chinese, "procs") => "现代化的 ps 替代",
+        (Lang::Chinese, "dust") => "现代化的 du 替代",
+        (Lang::Chinese, "duf") => "现代化的 df 替代",
+        (Lang::Chinese, "direnv") => "自动加载/卸载项目环境变量",
         (Lang::English, "git") => "Version control system",
         (Lang::English, "curl") => "HTTP client tool",
         (Lang::English, "wget") => "File download tool",
@@ -292,6 +297,11 @@ pub fn tool_desc(lang: Lang, name: &str) -> &'static str {
         (Lang::English, "fd") => "User-friendly find alternative",
         (Lang::English, "bat") => "Cat clone with syntax highlighting",
         (Lang::English, "eza") => "Modern ls replacement",
+        (Lang::English, "trash-cli") => "Safe rm alternative (moves to trash)",
+        (Lang::English, "procs") => "Modern ps replacement",
+        (Lang::English, "dust") => "Modern du replacement",
+        (Lang::English, "duf") => "Modern df replacement",
+        (Lang::English, "direnv") => "Auto-load/unload project environment variables",
         _ => "",
     }
 }
