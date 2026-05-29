@@ -87,6 +87,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         Page::Tools => render_tools(frame, app, chunks[0]),
         Page::Vim => render_vim(frame, app, chunks[0]),
         Page::VimPlugins => render_vim_plugins(frame, app, chunks[0]),
+        Page::Nvm => render_nvm(frame, app, chunks[0]),
         Page::Locale => render_locale(frame, app, chunks[0]),
         Page::Status(data) => render_status(frame, app, chunks[0], data),
     }
@@ -201,9 +202,9 @@ fn render_lang_select(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *label,
                 if i == app.lang_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             ListItem::new(Line::from(vec![marker, check, name_s]))
@@ -236,9 +237,9 @@ fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *name,
                 if i == app.menu_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let desc_s = Span::styled(format!("  — {}", desc), Style::default().fg(C_DIM));
@@ -319,9 +320,9 @@ fn render_theme(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *name,
                 if i == app.shell_theme_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let desc_s = Span::styled(format!("  {}", desc), Style::default().fg(C_DIM));
@@ -362,9 +363,9 @@ fn render_plugins(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *name,
                 if i == app.plugin_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let kind_s = Span::styled(format!(" [{}]", kind_label), Style::default().fg(C_WARN));
@@ -438,7 +439,7 @@ fn render_ssh(frame: &mut Frame, app: &App, area: Rect) {
         let key_text = Paragraph::new(app.last_pubkey.as_str())
             .block(key_block)
             .wrap(Wrap { trim: false })
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(Color::Reset));
         frame.render_widget(key_text, popup);
     }
 }
@@ -495,9 +496,9 @@ fn render_tools(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *name,
                 if i == app.tool_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let cat_s = Span::styled(format!(" [{}]", cat_label), Style::default().fg(C_WARN));
@@ -555,9 +556,9 @@ fn render_vim_plugins(frame: &mut Frame, app: &App, area: Rect) {
             let name_s = Span::styled(
                 *name,
                 if i == app.vim_plugin_index {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Color::Reset)
                 },
             );
             let desc_s = Span::styled(format!(" {}", desc), Style::default().fg(C_DIM));
@@ -570,6 +571,26 @@ fn render_vim_plugins(frame: &mut Frame, app: &App, area: Rect) {
         .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
 
     let mut state = ListState::default().with_selected(Some(app.vim_plugin_index));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+// ── Page: NVM ───────────────────────────────────────────────
+fn render_nvm(frame: &mut Frame, app: &App, area: Rect) {
+    let lang = app.lang;
+    let block = styled_block(i18n::nvm_title(lang));
+    let menu = i18n::nvm_menu(lang);
+
+    let items: Vec<(String, String)> = menu
+        .iter()
+        .map(|(n, d)| (n.to_string(), d.to_string()))
+        .collect();
+    let statuses = vec![app.nvm_installed, app.node_installed, false];
+    let items = make_list_items(&items, app.nvm_index, &statuses);
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().bg(C_HIGHLIGHT_BG).add_modifier(Modifier::BOLD));
+
+    let mut state = ListState::default().with_selected(Some(app.nvm_index));
     frame.render_stateful_widget(list, area, &mut state);
 }
 
@@ -609,7 +630,7 @@ fn render_status(frame: &mut Frame, _app: &App, area: Rect, data: &StatusData) {
             } else if l.starts_with("执行:") || l.starts_with("Run:") {
                 Style::default().fg(C_WARN)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Color::Reset)
             };
             Line::styled(l.as_str(), style)
         })
@@ -672,6 +693,7 @@ fn handle_key(
         Page::Tools => handle_tools(app, key),
         Page::Vim => handle_vim(terminal, app, key),
         Page::VimPlugins => handle_vim_plugins(app, key),
+        Page::Nvm => handle_nvm(terminal, app, key),
         Page::Locale => handle_locale(app, key),
         Page::Status(_) => handle_status(app, key),
     }
@@ -711,7 +733,8 @@ fn handle_main_menu(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Actio
                 3 => Page::Tools,
                 4 => Page::SshServer,
                 5 => Page::Vim,
-                6 => Page::Locale,
+                6 => Page::Nvm,
+                7 => Page::Locale,
                 _ => return Ok(None),
             };
             app.status_msg = i18n::msg_press_esc(app.lang).into();
@@ -1290,6 +1313,58 @@ fn handle_vim_plugins(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Act
             }
             app.page = Page::Vim;
         }
+        _ => {}
+    }
+    Ok(None)
+}
+
+fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>> {
+    let lang = app.lang;
+    let max = i18n::nvm_menu(lang).len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            app.page = Page::MainMenu;
+            app.nvm_index = 0;
+        }
+        KeyCode::Up => app.nvm_index = app.nvm_index.saturating_sub(1),
+        KeyCode::Down => app.nvm_index = (app.nvm_index + 1).min(max - 1),
+        KeyCode::Enter => match app.nvm_index {
+            0 => {
+                app.status_msg = i18n::msg_installing(lang, "nvm");
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || crate::modules::nvm::install_nvm())?;
+                    Ok(i18n::msg_success(lang, "nvm"))
+                }))));
+            }
+            1 => {
+                if !app.nvm_installed {
+                    app.status_msg = match lang {
+                        Lang::Chinese => "❌ 请先安装 nvm".into(),
+                        Lang::English => "❌ Please install nvm first".into(),
+                    };
+                    return Ok(None);
+                }
+                app.status_msg = i18n::msg_installing(lang, "Node.js LTS");
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || crate::modules::nvm::install_node_lts())?;
+                    Ok(i18n::msg_success(lang, "Node.js LTS"))
+                }))));
+            }
+            2 => {
+                app.status_msg = match lang {
+                    Lang::Chinese => "正在配置 Shell 集成...".into(),
+                    Lang::English => "Configuring shell integration...".into(),
+                };
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || crate::modules::nvm::ensure_shell_integration())?;
+                    Ok(match lang {
+                        Lang::Chinese => "✅ Shell 集成配置完成 (重新打开终端生效)".into(),
+                        Lang::English => "✅ Shell integration configured (reopen terminal to apply)".into(),
+                    })
+                }))));
+            }
+            _ => {}
+        },
         _ => {}
     }
     Ok(None)

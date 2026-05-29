@@ -30,6 +30,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("🔧 基础工具", "安装常用开发工具"),
             ("🖥️ SSH 服务", "安装并配置 SSH 远程登录"),
             ("📝 Vim 配置", "安装 Vim, Vundle 和插件"),
+            ("🟢 Node.js (nvm)", "安装 nvm 和 Node.js LTS"),
             ("🇨🇳 中文配置", "配置中文 locale、字体和输入法"),
         ],
         Lang::English => &[
@@ -39,6 +40,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("🔧 Basic Tools", "Install common dev tools"),
             ("🖥️ SSH Server", "Install and configure SSH server"),
             ("📝 Vim Config", "Install Vim, Vundle and plugins"),
+            ("🟢 Node.js (nvm)", "Install nvm and Node.js LTS"),
             ("🇨🇳 Chinese Config", "Configure Chinese locale, fonts and input"),
         ],
     }
@@ -467,5 +469,28 @@ pub fn msg_fail(lang: Lang, name: &str, err: &str) -> String {
     match lang {
         Lang::Chinese => format!("❌ {} 安装失败: {}", name, err),
         Lang::English => format!("❌ {} failed: {}", name, err),
+    }
+}
+
+// ── NVM ─────────────────────────────────────────────────────
+pub fn nvm_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "Node.js 环境 (nvm)",
+        Lang::English => "Node.js Environment (nvm)",
+    }
+}
+
+pub fn nvm_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
+    match lang {
+        Lang::Chinese => &[
+            ("安装 nvm", "Node Version Manager，管理多版本 Node.js"),
+            ("安装 Node.js LTS", "安装最新长期支持版本的 Node.js"),
+            ("配置 Shell 集成", "确保 .bashrc/.zshrc 中包含 nvm 加载脚本"),
+        ],
+        Lang::English => &[
+            ("Install nvm", "Node Version Manager - manage multiple Node.js versions"),
+            ("Install Node.js LTS", "Install latest Long Term Support version of Node.js"),
+            ("Configure Shell Integration", "Ensure nvm load script is in .bashrc/.zshrc"),
+        ],
     }
 }

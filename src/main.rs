@@ -59,6 +59,8 @@ fn refresh_state(app: &mut App) {
     app.fonts_installed = distro::is_package_installed("noto-fonts-cjk");
     app.vim_installed = distro::is_package_installed("vim");
     app.vundle_installed = home.join(".vim/bundle/Vundle.vim").exists();
+    app.nvm_installed = modules::nvm::is_nvm_installed();
+    app.node_installed = modules::nvm::installed_node_version().is_some();
 
     let current_shell = std::env::var("SHELL").unwrap_or_default();
     app.default_shell_set = current_shell.contains("zsh");

@@ -15,6 +15,7 @@ pub enum Page {
     Tools,
     Vim,
     VimPlugins,
+    Nvm,
     Locale,
     Status(Box<StatusData>),
 }
@@ -77,6 +78,11 @@ pub struct App {
     pub vundle_installed: bool,
     pub vim_plugin_index: usize,
     pub selected_vim_plugins: Vec<usize>,
+
+    // -- nvm --
+    pub nvm_index: usize,
+    pub nvm_installed: bool,
+    pub node_installed: bool,
 
     // -- locale --
     pub locale_index: usize,
@@ -209,6 +215,10 @@ impl App {
             vundle_installed,
             vim_plugin_index: 0,
             selected_vim_plugins: vec![],
+
+            nvm_index: 0,
+            nvm_installed: crate::modules::nvm::is_nvm_installed(),
+            node_installed: crate::modules::nvm::installed_node_version().is_some(),
 
             locale_index: 0,
             locale_configured: false,
