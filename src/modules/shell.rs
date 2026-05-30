@@ -310,11 +310,27 @@ pub fn get_bundled_theme_list() -> Vec<(String, String)> {
 }
 
 pub fn clear_shell() -> anyhow::Result<()> {
+    // 1. 还原默认 shell 为 bash（如果当前是 zsh）
+    if let Ok(bash_path) = Command::new("which").arg("bash").output() {
+        let bash_path = String::from_utf8_lossy(&bash_path.stdout).trim().to_string();
+        if !bash_path.is_empty() {
+            let _ = Command::new("chsh")
+                .args(["-s", &bash_path])
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status();
+        }
+    }
+
+    // 2. 级联删除 Oh My Zsh
     let home = get_real_home()?;
     let omz_dir = home.join(".oh-my-zsh");
     if omz_dir.exists() {
         std::fs::remove_dir_all(&omz_dir)?;
     }
+
+    // 3. 卸载 zsh
     crate::distro::uninstall_packages(&["zsh"])?;
     Ok(())
 }
