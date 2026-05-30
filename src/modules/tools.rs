@@ -4,48 +4,77 @@ use std::fs;
 use std::io::Write;
 use std::process::Command;
 
-/// 安装工具列表：先刷新缓存 → 批发 apt 安装 → 剩余走 GitHub 兜底
-/// 单个工具失败不影响后续安装，所有错误汇总返回
+/// 安装工具列表：apt 批量 → snap 逐个 → GitHub 兜底
+/// 单个工具失败不影响后续，单行错误汇总返回
 pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
     // 1. 刷新包管理器缓存（仅 Debian 系，只跑一次）
     let _ = distro::refresh_cache();
 
-    // 2. 分类：仓库有的走 apt，没有的走 GitHub 兜底
+    // 2. 分类
     let mut apt_packages: Vec<&str> = Vec::new();
-    let mut fallback_tools: Vec<&str> = Vec::new();
+    let mut snap_tools: Vec<&str> = Vec::new();
+    let mut github_tools: Vec<&str> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
 
     for tool in selected {
         if let Some(pkg) = distro::package_name(tool) {
             if distro::is_package_installed(pkg) {
-                continue; // 已安装，跳过
+                continue; // 已安装
             }
             if distro::package_exists(pkg) {
                 apt_packages.push(pkg);
             } else {
-                fallback_tools.push(tool);
+                snap_tools.push(tool);
             }
         } else {
-            fallback_tools.push(tool);
+            snap_tools.push(tool);
         }
     }
 
-    // 3. 批量子 apt 安装
-    let mut errors: Vec<String> = Vec::new();
+    // 3. apt 批量安装
     if !apt_packages.is_empty() {
         if let Err(e) = distro::install_packages(&apt_packages) {
-            errors.push(format!("apt 批量安装失败: {}", e));
+            errors.push(format!("apt: {}", e));
         }
     }
 
-    // 4. 逐个走 GitHub 兜底
-    for tool in &fallback_tools {
+    // 4. snap 逐个安装（仅 Ubuntu/Debian），失败则转 GitHub
+    let has_snap = crate::utils::command_exists("snap");
+    for tool in &snap_tools {
+        if has_snap && install_via_snap(tool).is_ok() {
+            continue;
+        }
+        github_tools.push(*tool);
+    }
+
+    // 5. GitHub 兜底
+    for tool in &github_tools {
         if let Err(e) = install_via_github_release(tool) {
             errors.push(format!("{}: {}", tool, e));
         }
     }
 
     if !errors.is_empty() {
-        anyhow::bail!("以下工具安装失败:\n{}", errors.join("\n"));
+        anyhow::bail!("{} 安装失败: {}", errors.join(", "), "请手动安装");
+    }
+    Ok(())
+}
+
+/// snap 安装（apt 不可用时的次选）
+fn install_via_snap(tool: &str) -> anyhow::Result<()> {
+    let snap_name = match tool {
+        "duf" => "duf-utility",  // snap 包名不同
+        other => other,
+    };
+
+    let status = Command::new("sudo")
+        .args(["snap", "install", snap_name])
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!("snap install {} 失败", snap_name);
     }
     Ok(())
 }
