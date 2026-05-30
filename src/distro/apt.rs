@@ -63,8 +63,9 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
         "duf" => Some("duf"),
         "direnv" => Some("direnv"),
         "zsh" => Some("zsh"),
-        "docker" => Some("docker.io"),
-        "docker-compose" => Some("docker-compose-v2"),
+        // docker 使用官方脚本安装，不走 apt
+        "docker" => None,
+        "docker-compose" => None,
         "noto-fonts-cjk" => Some("fonts-noto-cjk"),
         "wqy-microhei" => Some("fonts-wqy-microhei"),
         "wqy-zenhei" => Some("fonts-wqy-zenhei"),
