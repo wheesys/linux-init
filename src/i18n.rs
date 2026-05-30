@@ -103,6 +103,13 @@ pub fn shell_set_default(lang: Lang) -> (&'static str, &'static str) {
     }
 }
 
+pub fn shell_clear(lang: Lang) -> (&'static str, &'static str) {
+    match lang {
+        Lang::Chinese => ("清除 Shell", "还原默认 shell 为 bash，卸载 zsh 和 Oh My Zsh"),
+        Lang::English => ("Clear Shell", "Restore default shell to bash, remove zsh and Oh My Zsh"),
+    }
+}
+
 // ── Themes ──────────────────────────────────────────────────
 pub fn theme_title(lang: Lang) -> &'static str {
     match lang {
@@ -210,16 +217,16 @@ pub fn docker_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("2. 安装 Docker Compose", "安装 Docker Compose 插件"),
             ("3. 配置非 root 用户", "将当前用户加入 docker 组"),
             ("4. 启动 Docker 服务", "启用并启动 docker.service"),
-            ("5. 清空 Docker", "卸载 Docker 并移除配置"),
-            ("6. 切换 Docker 源", "切换 Docker Hub 镜像加速源"),
+            ("5. 切换 Docker 源", "切换 Docker Hub 镜像加速源"),
+            ("6. 清空 Docker", "卸载 Docker 并移除配置"),
         ],
         Lang::English => &[
             ("1. Install Docker", "Install Docker engine"),
             ("2. Install Docker Compose", "Install Docker Compose plugin"),
             ("3. Configure non-root", "Add current user to docker group"),
             ("4. Start Docker Service", "Enable and start docker.service"),
-            ("5. Clear Docker", "Uninstall Docker and remove config"),
-            ("6. Switch Docker Mirror", "Switch Docker Hub registry mirror"),
+            ("5. Switch Docker Mirror", "Switch Docker Hub registry mirror"),
+            ("6. Clear Docker", "Uninstall Docker and remove config"),
         ],
     }
 }
@@ -598,14 +605,14 @@ pub fn nvm_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
         Lang::Chinese => &[
             ("1. 安装 nvm", "Node Version Manager，管理多版本 Node.js"),
             ("2. 安装 Node.js", "选择并安装最新版或 LTS 长期支持版"),
-            ("3. 清空 nvm", "卸载 nvm 并删除所有 Node.js 版本"),
-            ("4. 切换 npm 源", "切换 npm registry 镜像源"),
+            ("3. 切换 npm 源", "切换 npm registry 镜像源"),
+            ("4. 清空 nvm", "卸载 nvm 并删除所有 Node.js 版本"),
         ],
         Lang::English => &[
             ("1. Install nvm", "Node Version Manager - manage multiple Node.js versions"),
             ("2. Install Node.js", "Choose between latest or LTS version"),
-            ("3. Clear nvm", "Uninstall nvm and remove all Node.js versions"),
-            ("4. Switch npm Mirror", "Switch npm registry mirror"),
+            ("3. Switch npm Mirror", "Switch npm registry mirror"),
+            ("4. Clear nvm", "Uninstall nvm and remove all Node.js versions"),
         ],
     }
 }

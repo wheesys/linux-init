@@ -212,7 +212,7 @@ fn render_lang_select(frame: &mut Frame, app: &App, area: Rect) {
                 Span::styled("○ ", Style::default().fg(C_DIM))
             };
             let name_s = Span::styled(
-                *label,
+                format!("{}. {}", i + 1, label),
                 if i == app.lang_index {
                     Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
@@ -265,7 +265,7 @@ fn render_main_menu(frame: &mut Frame, app: &App, area: Rect) {
                 Span::raw("  ")
             };
             let name_s = Span::styled(
-                *name,
+                format!("{}. {}", i + 1, name),
                 if is_selected {
                     Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
@@ -317,7 +317,21 @@ fn render_shell(frame: &mut Frame, app: &App, area: Rect) {
         statuses.push(app.default_shell_set);
     }
 
-    let items = make_list_items(&all_items, app.shell_index, &statuses);
+    // 清除 Shell 放在最后
+    if app.zsh_installed || app.omz_installed {
+        let (n, d) = i18n::shell_clear(lang);
+        all_items.push((n.into(), d.into()));
+        statuses.push(false);
+    }
+
+    // 添加数字前缀
+    let numbered_items: Vec<(String, String)> = all_items
+        .iter()
+        .enumerate()
+        .map(|(i, (name, desc))| (format!("{}. {}", i + 1, name), desc.clone()))
+        .collect();
+
+    let items = make_list_items(&numbered_items, app.shell_index, &statuses);
     let list = List::new(items)
         .block(block)
         .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
@@ -599,7 +613,7 @@ fn render_tools(frame: &mut Frame, app: &App, area: Rect) {
                 Span::styled("□ ", Style::default().fg(C_DIM))
             };
             let name_s = Span::styled(
-                *name,
+                format!("{}. {}", i + 1, name),
                 if i == app.tool_index {
                     Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
@@ -863,7 +877,7 @@ fn render_source_select(frame: &mut Frame, app: &App, area: Rect) {
                 Lang::English => m.name_en,
             };
             let name_s = Span::styled(
-                name,
+                format!("{}. {}", i + 1, name),
                 if is_selected {
                     Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
                 } else {
@@ -941,7 +955,7 @@ pub fn handle_event(terminal: &mut Term, app: &mut App) -> anyhow::Result<Option
                     if n > 0 { input_number_to_page(app, n - 1); }
                 }
                 app.input_buf.clear();
-                // fall through to handle_key (Enter will trigger action)
+                return Ok(None);  // 数字导航只跳转，不触发动作
             }
             _ => {}
         }
@@ -1099,6 +1113,10 @@ fn shell_menu_count(app: &App) -> usize {
     if app.zsh_installed {
         count += 1;
     }
+    // 清除选项：只要有 zsh 或 omz 就显示
+    if app.zsh_installed || app.omz_installed {
+        count += 1;
+    }
     count
 }
 
@@ -1202,6 +1220,17 @@ fn handle_shell_enter(
                 }
             }
         }
+    }
+
+    // 清除 Shell —— 始终是菜单最后一项
+    if (app.zsh_installed || app.omz_installed)
+        && app.shell_index == shell_menu_count(app) - 1
+    {
+        app.status_msg = i18n::msg_installing(lang, "清除 Shell");
+        return Ok(Some(Action::Execute(Box::new(move |terminal| {
+            run_in_terminal(terminal, || crate::modules::shell::clear_shell())?;
+            Ok(i18n::msg_success(lang, "清除 Shell"))
+        }))));
     }
 
     Ok(None)
@@ -1322,8 +1351,7 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         KeyCode::Up => app.docker_index = app.docker_index.saturating_sub(1),
         KeyCode::Down => app.docker_index = (app.docker_index + 1).min(max - 1),
         KeyCode::Enter | KeyCode::Char(_) => {
-            if app.docker_index == 4 { app.status_msg = i18n::msg_installing(lang, "清空 Docker"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::docker::clear_docker())?; Ok(i18n::msg_success(lang, "清空 Docker")) })))); }
-            if app.docker_index == 5 {
+            if app.docker_index == 4 {
                 app.page = Page::SourceSelect(SourceType::Docker);
                 app.source_index = 0;
                 app.source_tested = false;
@@ -1331,6 +1359,7 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
                 app.source_recommended = None;
                 return Ok(None);
             }
+            if app.docker_index == 5 { app.status_msg = i18n::msg_installing(lang, "清空 Docker"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::docker::clear_docker())?; Ok(i18n::msg_success(lang, "清空 Docker")) })))); }
             let already_done = match app.docker_index {
                 0 => app.docker_installed, 1 => app.compose_installed, 2 => app.docker_user_configured, 3 => app.docker_service_running, _ => false,
             };
@@ -1845,18 +1874,18 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
                 app.nvm_node_index = 0;
             }
             2 => {
-                app.status_msg = i18n::msg_installing(lang, "清空 nvm");
-                return Ok(Some(Action::Execute(Box::new(move |terminal| {
-                    run_in_terminal(terminal, || crate::modules::nvm::clear_nvm())?;
-                    Ok(i18n::msg_success(lang, "清空 nvm"))
-                }))));
-            }
-            3 => {
                 app.page = Page::SourceSelect(SourceType::Npm);
                 app.source_index = 0;
                 app.source_tested = false;
                 app.source_latencies.clear();
                 app.source_recommended = None;
+            }
+            3 => {
+                app.status_msg = i18n::msg_installing(lang, "清空 nvm");
+                return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                    run_in_terminal(terminal, || crate::modules::nvm::clear_nvm())?;
+                    Ok(i18n::msg_success(lang, "清空 nvm"))
+                }))));
             }
             _ => {}
         },
