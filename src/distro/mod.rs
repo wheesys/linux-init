@@ -81,6 +81,25 @@ pub fn is_package_installed(package: &str) -> bool {
     }
 }
 
+/// 包是否在系统仓库中存在（仅 Debian 系实际检查 apt-cache）
+pub fn package_exists(package: &str) -> bool {
+    let distro = detect();
+    match distro.family() {
+        DistroFamily::Arch => true,
+        DistroFamily::Debian => apt::package_exists(package),
+        DistroFamily::Unknown => false,
+    }
+}
+
+/// 刷新包管理器缓存（仅 Debian 系需要 apt update）
+pub fn refresh_cache() -> anyhow::Result<()> {
+    let distro = detect();
+    match distro.family() {
+        DistroFamily::Debian => apt::update(),
+        _ => Ok(()),
+    }
+}
+
 pub fn package_name(tool: &str) -> Option<&'static str> {
     let distro = detect();
     match distro.family() {

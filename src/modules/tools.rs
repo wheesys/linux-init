@@ -4,41 +4,48 @@ use std::fs;
 use std::io::Write;
 use std::process::Command;
 
-/// 安装工具列表：逐个安装，包管理器优先，失败时走 GitHub 二进制下载兜底
+/// 安装工具列表：先刷新缓存 → 批发 apt 安装 → 剩余走 GitHub 兜底
 /// 单个工具失败不影响后续安装，所有错误汇总返回
 pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
-    let mut errors: Vec<String> = Vec::new();
+    // 1. 刷新包管理器缓存（仅 Debian 系，只跑一次）
+    let _ = distro::refresh_cache();
+
+    // 2. 分类：仓库有的走 apt，没有的走 GitHub 兜底
+    let mut apt_packages: Vec<&str> = Vec::new();
+    let mut fallback_tools: Vec<&str> = Vec::new();
 
     for tool in selected {
-        if let Err(e) = install_single_tool(tool) {
+        if let Some(pkg) = distro::package_name(tool) {
+            if distro::is_package_installed(pkg) {
+                continue; // 已安装，跳过
+            }
+            if distro::package_exists(pkg) {
+                apt_packages.push(pkg);
+            } else {
+                fallback_tools.push(tool);
+            }
+        } else {
+            fallback_tools.push(tool);
+        }
+    }
+
+    // 3. 批量子 apt 安装
+    let mut errors: Vec<String> = Vec::new();
+    if !apt_packages.is_empty() {
+        if let Err(e) = distro::install_packages(&apt_packages) {
+            errors.push(format!("apt 批量安装失败: {}", e));
+        }
+    }
+
+    // 4. 逐个走 GitHub 兜底
+    for tool in &fallback_tools {
+        if let Err(e) = install_via_github_release(tool) {
             errors.push(format!("{}: {}", tool, e));
         }
     }
 
     if !errors.is_empty() {
         anyhow::bail!("以下工具安装失败:\n{}", errors.join("\n"));
-    }
-    Ok(())
-}
-
-/// 安装单个工具：包管理器 → GitHub 兜底
-fn install_single_tool(tool: &str) -> anyhow::Result<()> {
-    // 1. 尝试包管理器安装
-    if let Some(pkg) = distro::package_name(tool) {
-        if distro::is_package_installed(pkg) {
-            return Ok(()); // 已安装
-        }
-        // 尝试安装，成功则返回
-        if distro::install_packages(&[pkg]).is_ok() {
-            return Ok(());
-        }
-    }
-
-    // 2. 兜底：GitHub release 二进制下载（仅 Debian 系）
-    if distro::detect().family() == crate::distro::DistroFamily::Debian {
-        install_via_github_release(tool)?;
-    } else {
-        anyhow::bail!("{} 安装失败（包管理器和兜底方案均不可用）", tool);
     }
     Ok(())
 }

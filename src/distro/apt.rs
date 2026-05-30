@@ -1,26 +1,28 @@
 use std::process::Command;
 
+/// 刷新 apt 源（整个安装流程只应调用一次）
+pub fn update() -> anyhow::Result<()> {
+    let status = Command::new("sudo")
+        .arg("apt")
+        .arg("update")
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("apt update 失败");
+    }
+    Ok(())
+}
+
+/// 安装包（不自动 update，调用前应先 update）
 pub fn install(packages: &[&str]) -> anyhow::Result<()> {
     if packages.is_empty() {
         return Ok(());
     }
-
-    let update_status = Command::new("sudo")
-        .arg("apt")
-        .arg("update")
-        .status()?;
-
-    if !update_status.success() {
-        anyhow::bail!("apt update 失败");
-    }
-
     let status = Command::new("sudo")
         .arg("apt")
         .arg("install")
         .arg("-y")
         .args(packages)
         .status()?;
-
     if !status.success() {
         anyhow::bail!("apt 安装失败");
     }
@@ -39,6 +41,15 @@ pub fn is_installed(package: &str) -> bool {
     Command::new("dpkg")
         .arg("-s")
         .arg(package)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// 检查包是否在 apt 仓库中存在（不安装）
+pub fn package_exists(package: &str) -> bool {
+    Command::new("apt-cache")
+        .args(["show", package])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
