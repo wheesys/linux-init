@@ -44,125 +44,169 @@ fn install_single_tool(tool: &str) -> anyhow::Result<()> {
 }
 
 /// GitHub release 二进制下载（不编译）
-/// duf 提供 .deb，procs/eza 提供 tar.gz/zip
+/// 通过 GitHub API 动态获取 release assets，按关键词匹配文件名，无需硬编码命名规则
 fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
-    match tool {
-        "duf"   => install_github_deb("muesli", "duf", "duf")?,
-        "procs" => install_github_tarball("dalance", "procs", "procs")?,
-        "eza"   => install_github_tarball("eza-community", "eza", "eza")?,
-        _ => anyhow::bail!("{} 在当前系统无可用安装方式", tool),
+    let (owner, repo) = match tool {
+        "duf"   => ("muesli", "duf"),
+        "procs" => ("dalance", "procs"),
+        "eza"   => ("eza-community", "eza"),
+        _ => anyhow::bail!("{} 无可用 GitHub 仓库", tool),
+    };
+
+    let release = fetch_release(owner, repo)?;
+
+    // 按关键词匹配 asset，上游改名也不受影响
+    let asset_url = find_asset_url(&release.assets_json, tool, &release.tag)?;
+    let is_deb = asset_url.ends_with(".deb");
+
+    let tmp_file = format!("/tmp/linux-init-{}.download", tool);
+    download_file(&asset_url, &tmp_file)?;
+
+    if is_deb {
+        let status = Command::new("sudo")
+            .args(["dpkg", "-i", &tmp_file])
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()?;
+        let _ = fs::remove_file(&tmp_file);
+        if !status.success() {
+            anyhow::bail!("{} deb 安装失败", tool);
+        }
+    } else {
+        let tmp_dir = format!("/tmp/linux-init-{}-extract", tool);
+        let _ = fs::remove_dir_all(&tmp_dir);
+        fs::create_dir_all(&tmp_dir)?;
+        extract_archive(&tmp_file, &tmp_dir)?;
+        let bin_path = find_binary(&tmp_dir, tool)?;
+        let target = format!("/usr/local/bin/{}", tool);
+        let status = Command::new("sudo")
+            .args(["install", "-m", "755", &bin_path, &target])
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()?;
+        let _ = fs::remove_file(&tmp_file);
+        let _ = fs::remove_dir_all(&tmp_dir);
+        if !status.success() {
+            anyhow::bail!("{} 安装到 /usr/local/bin 失败", tool);
+        }
     }
     Ok(())
 }
 
-/// 从 GitHub release 下载 .deb 并 dpkg -i 安装
-fn install_github_deb(owner: &str, repo: &str, bin_name: &str) -> anyhow::Result<()> {
-    let tag = fetch_latest_tag(owner, repo)?;
-    let deb_name = format!("{}_{}_linux_amd64.deb", bin_name, &tag[1..]); // tag 如 "v0.9.1", 去 v
-    let url = format!(
-        "https://github.com/{}/{}/releases/download/{}/{}",
-        owner, repo, tag, deb_name
+struct ReleaseInfo {
+    tag: String,
+    assets_json: String,
+}
+
+/// 调用 GitHub API 获取最新 release 信息
+fn fetch_release(owner: &str, repo: &str) -> anyhow::Result<ReleaseInfo> {
+    let api_url = format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        owner, repo
     );
-    let tmp_deb = format!("/tmp/linux-init-{}.deb", bin_name);
-
-    let status = Command::new("curl")
-        .args(["-fsSL", "--max-time", "120", "-o", &tmp_deb, &url])
-        .stdout(std::process::Stdio::inherit())
+    let output = Command::new("curl")
+        .args(["-fsSL", "--max-time", "30", &api_url])
+        .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::inherit())
-        .status()?;
-    if !status.success() {
-        let _ = fs::remove_file(&tmp_deb);
-        anyhow::bail!("{} 下载失败: {}", bin_name, url);
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!("获取 {}/{} 最新版本信息失败", owner, repo);
     }
+    let json = String::from_utf8_lossy(&output.stdout).to_string();
 
-    let status = Command::new("sudo")
-        .args(["dpkg", "-i", &tmp_deb])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()?;
-    let _ = fs::remove_file(&tmp_deb);
-    if !status.success() {
-        anyhow::bail!("{} deb 安装失败", bin_name);
-    }
-    Ok(())
+    let tag = json
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("\"tag_name\":") {
+                Some(
+                    trimmed
+                        .trim_start_matches("\"tag_name\":")
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches(',')
+                        .to_string(),
+                )
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| anyhow::anyhow!("无法解析 {} 的 tag_name", api_url))?;
+
+    Ok(ReleaseInfo { tag, assets_json: json })
 }
 
-/// 从 GitHub release 下载 tar.gz/zip 二进制，解压到 /usr/local/bin
-fn install_github_tarball(owner: &str, repo: &str, bin_name: &str) -> anyhow::Result<()> {
-    let tag = fetch_latest_tag(owner, repo)?;
+/// 从 assets JSON 中按关键词匹配下载 URL
+fn find_asset_url(assets_json: &str, tool: &str, _tag: &str) -> anyhow::Result<String> {
     let arch = if cfg!(target_arch = "x86_64") { "x86_64" }
         else if cfg!(target_arch = "aarch64") { "aarch64" }
         else { anyhow::bail!("不支持的 CPU 架构") };
 
-    let (tarball, _inner_path) = match (owner, repo) {
-        ("dalance", "procs") => (
-            format!("procs-v{}-{}-linux.zip", &tag[1..], arch),
-            "procs".to_string(),
-        ),
-        ("eza-community", "eza") => (
-            format!("eza_{}-unknown-linux-gnu.tar.gz", arch),
-            "eza".to_string(),
-        ),
-        _ => anyhow::bail!("未知的 GitHub 仓库: {}/{}", owner, repo),
+    // 每个工具定义一组匹配关键词（必须全部命中）
+    let keywords: Vec<&str> = match tool {
+        "duf"   => vec!["linux", arch, ".deb"],
+        "procs" => vec!["linux", arch, ".zip"],
+        "eza"   => vec!["linux", "gnu", ".tar.gz"],
+        _ => anyhow::bail!("{} 无匹配规则", tool),
     };
 
-    let url = format!(
-        "https://github.com/{}/{}/releases/download/{}/{}",
-        owner, repo, tag, tarball
-    );
-    let tmp_archive = format!("/tmp/linux-init-{}.archive", bin_name);
-    let tmp_dir = format!("/tmp/linux-init-{}-extract", bin_name);
+    // 从 JSON 中提取所有 browser_download_url
+    let mut best_url: Option<String> = None;
+    for line in assets_json.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("\"browser_download_url\":") {
+            let url: String = trimmed
+                .trim_start_matches("\"browser_download_url\":")
+                .trim()
+                .trim_matches('"')
+                .trim_matches(',')
+                .to_string();
+            if keywords.iter().all(|kw| url.contains(kw)) {
+                best_url = Some(url);
+                break;
+            }
+        }
+    }
 
-    // 下载
+    best_url.ok_or_else(|| anyhow::anyhow!(
+        "{} 未找到匹配的 release asset（关键词: {:?}），可能上游改名或架构不兼容",
+        tool, keywords
+    ))
+}
+
+fn download_file(url: &str, dest: &str) -> anyhow::Result<()> {
     let status = Command::new("curl")
-        .args(["-fsSL", "--max-time", "120", "-o", &tmp_archive, &url])
+        .args(["-fsSL", "--max-time", "120", "-o", dest, url])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()?;
     if !status.success() {
-        let _ = fs::remove_file(&tmp_archive);
-        anyhow::bail!("{} 下载失败: {}", bin_name, url);
+        let _ = fs::remove_file(dest);
+        anyhow::bail!("下载失败: {}", url);
     }
+    Ok(())
+}
 
-    // 解压
-    let _ = fs::remove_dir_all(&tmp_dir);
-    fs::create_dir_all(&tmp_dir)?;
-
-    if tarball.ends_with(".zip") {
+fn extract_archive(archive: &str, dest: &str) -> anyhow::Result<()> {
+    if archive.ends_with(".zip") {
         let status = Command::new("unzip")
-            .args(["-o", &tmp_archive, "-d", &tmp_dir])
+            .args(["-o", archive, "-d", dest])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::inherit())
             .status()?;
         if !status.success() {
-            anyhow::bail!("{} 解压失败（需要 unzip 命令）", bin_name);
+            anyhow::bail!("解压失败（需要 unzip 命令）: {}", archive);
         }
     } else {
         let status = Command::new("tar")
-            .args(["-xzf", &tmp_archive, "-C", &tmp_dir])
+            .args(["-xzf", archive, "-C", dest])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::inherit())
             .status()?;
         if !status.success() {
-            anyhow::bail!("{} 解压失败", bin_name);
+            anyhow::bail!("解压失败: {}", archive);
         }
     }
-
-    // 找到二进制文件并安装到 /usr/local/bin
-    let bin_path = find_binary(&tmp_dir, bin_name)?;
-    let target = format!("/usr/local/bin/{}", bin_name);
-    let status = Command::new("sudo")
-        .args(["install", "-m", "755", &bin_path, &target])
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()?;
-    if !status.success() {
-        anyhow::bail!("{} 安装到 /usr/local/bin 失败", bin_name);
-    }
-
-    // 清理
-    let _ = fs::remove_file(&tmp_archive);
-    let _ = fs::remove_dir_all(&tmp_dir);
     Ok(())
 }
 
@@ -184,42 +228,6 @@ fn find_binary(dir: &str, name: &str) -> anyhow::Result<String> {
     anyhow::bail!("未在解压目录中找到二进制: {}", name)
 }
 
-/// 通过 GitHub API 获取最新 release tag
-fn fetch_latest_tag(owner: &str, repo: &str) -> anyhow::Result<String> {
-    let api_url = format!(
-        "https://api.github.com/repos/{}/{}/releases/latest",
-        owner, repo
-    );
-    let output = Command::new("curl")
-        .args(["-fsSL", "--max-time", "30", &api_url])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::inherit())
-        .output()?;
-    if !output.status.success() {
-        anyhow::bail!("获取 {}/{} 最新版本信息失败", owner, repo);
-    }
-    let json = String::from_utf8_lossy(&output.stdout);
-    // 解析 "tag_name": "v0.8.1"
-    let tag = json
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("\"tag_name\":") {
-                Some(
-                    trimmed
-                        .trim_start_matches("\"tag_name\":")
-                        .trim()
-                        .trim_matches('"')
-                        .trim_matches(',')
-                        .to_string(),
-                )
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| anyhow::anyhow!("无法解析 {} 的 tag_name", api_url))?;
-    Ok(tag)
-}
 
 pub fn get_tool_status(tool: &str) -> bool {
     if let Some(pkg) = distro::package_name(tool) {
