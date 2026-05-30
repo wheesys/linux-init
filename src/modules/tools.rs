@@ -50,6 +50,7 @@ fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
         "duf"   => ("muesli", "duf"),
         "procs" => ("dalance", "procs"),
         "eza"   => ("eza-community", "eza"),
+        "dust"  => ("bootandy", "dust"),
         _ => anyhow::bail!("{} 无可用 GitHub 仓库", tool),
     };
 
@@ -76,7 +77,8 @@ fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
         let tmp_dir = format!("/tmp/linux-init-{}-extract", tool);
         let _ = fs::remove_dir_all(&tmp_dir);
         fs::create_dir_all(&tmp_dir)?;
-        extract_archive(&tmp_file, &tmp_dir)?;
+        // 用 asset URL 的扩展名判断解压方式，而非临时文件名
+        extract_archive_by_ext(&tmp_file, &asset_url, &tmp_dir)?;
         let bin_path = find_binary(&tmp_dir, tool)?;
         let target = format!("/usr/local/bin/{}", tool);
         let status = Command::new("sudo")
@@ -147,6 +149,7 @@ fn find_asset_url(assets_json: &str, tool: &str, _tag: &str) -> anyhow::Result<S
         "duf"   => vec!["linux", arch, ".deb"],
         "procs" => vec!["linux", arch, ".zip"],
         "eza"   => vec!["linux", "gnu", ".tar.gz"],
+        "dust"  => vec!["linux", "gnu", ".tar.gz"],
         _ => anyhow::bail!("{} 无匹配规则", tool),
     };
 
@@ -187,8 +190,9 @@ fn download_file(url: &str, dest: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn extract_archive(archive: &str, dest: &str) -> anyhow::Result<()> {
-    if archive.ends_with(".zip") {
+/// 用原始 URL 的扩展名判断解压方式（不能用临时文件名，因为后缀是 .download）
+fn extract_archive_by_ext(archive: &str, original_url: &str, dest: &str) -> anyhow::Result<()> {
+    if original_url.ends_with(".zip") {
         let status = Command::new("unzip")
             .args(["-o", archive, "-d", dest])
             .stdout(std::process::Stdio::null())
