@@ -6,4 +6,5 @@ pub mod tools;
 pub mod locale;
 pub mod vim;
 pub mod nvm;
+pub mod sources;
 

@@ -91,6 +91,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         Page::NvmNodeVersion => render_nvm_node(frame, app, chunks[0]),
         Page::Locale => render_locale(frame, app, chunks[0]),
         Page::Status(data) => render_status(frame, app, chunks[0], data),
+        Page::SourceSelect(_) => render_source_select(frame, app, chunks[0]),
     }
 
     render_status_bar(frame, app, chunks[1]);
@@ -104,6 +105,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Page::Status(_) => i18n::statusbar_status(lang),
         Page::Tools | Page::VimPlugins | Page::VimOptimize | Page::NvmNodeVersion => i18n::statusbar_tools(lang),
         Page::ShellZshPlugins => i18n::statusbar_multi(lang),
+        Page::SourceSelect(_) => i18n::source_statusbar(lang),
         _ => i18n::statusbar_nav(lang),
     };
     let mut spans = vec![
@@ -797,6 +799,90 @@ fn render_locale(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+// ── Page: Source Select ─────────────────────────────────────
+fn render_source_select(frame: &mut Frame, app: &App, area: Rect) {
+    let lang = app.lang;
+    let source_type = match &app.page {
+        Page::SourceSelect(t) => *t,
+        _ => return,
+    };
+
+    let title = match source_type {
+        SourceType::System => i18n::sources_title(lang),
+        SourceType::Docker => i18n::docker_mirror_title(lang),
+        SourceType::Npm => i18n::npm_mirror_title(lang),
+    };
+    let block = styled_block(title);
+
+    let mirrors = match source_type {
+        SourceType::System => crate::modules::sources::system_mirrors(),
+        SourceType::Docker => crate::modules::sources::docker_mirrors(),
+        SourceType::Npm => crate::modules::sources::npm_mirrors(),
+    };
+
+    let items: Vec<ListItem> = mirrors
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let is_selected = i == app.source_index;
+            let marker = if is_selected {
+                Span::styled("  ▸ ", Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD))
+            } else {
+                Span::raw("    ")
+            };
+
+            let rec_span = if app.source_recommended == Some(i) {
+                Span::styled(
+                    format!(" {} ", i18n::source_recommended(lang)),
+                    Style::default().fg(C_WARN),
+                )
+            } else {
+                Span::raw("")
+            };
+
+            let lat_span = if app.source_tested {
+                match app.source_latencies.get(i) {
+                    Some(Some(ms)) => {
+                        let color = if *ms < 50 { C_SUCCESS } else if *ms < 200 { C_WARN } else { C_ERROR };
+                        Span::styled(
+                            format!("  {}", i18n::source_latency(lang, *ms)),
+                            Style::default().fg(color),
+                        )
+                    }
+                    _ => Span::styled(
+                        format!("  {}", i18n::source_unreachable(lang)),
+                        Style::default().fg(C_ERROR),
+                    ),
+                }
+            } else {
+                Span::raw("")
+            };
+
+            let name = match lang {
+                Lang::Chinese => m.name_cn,
+                Lang::English => m.name_en,
+            };
+            let name_s = Span::styled(
+                name,
+                if is_selected {
+                    Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Reset)
+                },
+            );
+
+            ListItem::new(Line::from(vec![marker, rec_span, name_s, lat_span]))
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD | Modifier::REVERSED));
+
+    let mut state = ListState::default().with_selected(Some(app.source_index));
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
 // ── Page: Status ───────────────────────────────────────────
 fn render_status(frame: &mut Frame, _app: &App, area: Rect, data: &StatusData) {
     let block = styled_block(&data.title);
@@ -894,6 +980,7 @@ fn input_number_to_page(app: &mut App, idx: usize) {
         Page::Nvm => app.nvm_index = idx,
         Page::NvmNodeVersion => app.nvm_node_index = idx,
         Page::Locale => app.locale_index = idx,
+        Page::SourceSelect(_) => app.source_index = idx,
         _ => {}
     }
 }
@@ -920,6 +1007,7 @@ fn handle_key(
         Page::NvmNodeVersion => handle_nvm_node(app, key),
         Page::Locale => handle_locale(app, key),
         Page::Status(_) => handle_status(app, key),
+        Page::SourceSelect(_) => handle_source_select(terminal, app, key),
     }
 }
 
@@ -965,6 +1053,15 @@ fn handle_main_menu(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Actio
                 5 => Page::Vim,
                 6 => Page::Nvm,
                 7 => Page::Locale,
+                8 => {
+                    app.page = Page::SourceSelect(SourceType::System);
+                    app.source_index = 0;
+                    app.source_tested = false;
+                    app.source_latencies.clear();
+                    app.source_recommended = None;
+                    app.status_msg = i18n::msg_press_esc(app.lang).into();
+                    return Ok(None);
+                }
                 _ => return Ok(None),
             };
             app.status_msg = i18n::msg_press_esc(app.lang).into();
@@ -1226,6 +1323,14 @@ fn handle_docker(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
         KeyCode::Down => app.docker_index = (app.docker_index + 1).min(max - 1),
         KeyCode::Enter | KeyCode::Char(_) => {
             if app.docker_index == 4 { app.status_msg = i18n::msg_installing(lang, "清空 Docker"); return Ok(Some(Action::Execute(Box::new(move |terminal| { run_in_terminal(terminal, || crate::modules::docker::clear_docker())?; Ok(i18n::msg_success(lang, "清空 Docker")) })))); }
+            if app.docker_index == 5 {
+                app.page = Page::SourceSelect(SourceType::Docker);
+                app.source_index = 0;
+                app.source_tested = false;
+                app.source_latencies.clear();
+                app.source_recommended = None;
+                return Ok(None);
+            }
             let already_done = match app.docker_index {
                 0 => app.docker_installed, 1 => app.compose_installed, 2 => app.docker_user_configured, 3 => app.docker_service_running, _ => false,
             };
@@ -1746,6 +1851,13 @@ fn handle_nvm(_terminal: &mut Term, app: &mut App, key: KeyEvent) -> anyhow::Res
                     Ok(i18n::msg_success(lang, "清空 nvm"))
                 }))));
             }
+            3 => {
+                app.page = Page::SourceSelect(SourceType::Npm);
+                app.source_index = 0;
+                app.source_tested = false;
+                app.source_latencies.clear();
+                app.source_recommended = None;
+            }
             _ => {}
         },
         _ => {}
@@ -1808,6 +1920,62 @@ fn handle_locale(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Action>>
             return Ok(Some(Action::Execute(Box::new(move |terminal| {
                 run_in_terminal(terminal, || match idx { 0 => crate::modules::locale::configure_locale(), 1 => crate::modules::locale::install_cjk_fonts(), 2 => crate::modules::locale::install_fcitx5(), _ => Ok(()) })?;
                 Ok(after)
+            }))));
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
+fn handle_source_select(
+    _terminal: &mut Term,
+    app: &mut App,
+    key: KeyEvent,
+) -> anyhow::Result<Option<Action>> {
+    let lang = app.lang;
+    let mirrors = match &app.page {
+        Page::SourceSelect(SourceType::System) => crate::modules::sources::system_mirrors(),
+        Page::SourceSelect(SourceType::Docker) => crate::modules::sources::docker_mirrors(),
+        Page::SourceSelect(SourceType::Npm) => crate::modules::sources::npm_mirrors(),
+        _ => return Ok(None),
+    };
+    let max = mirrors.len();
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Backspace => {
+            app.page = match &app.page {
+                Page::SourceSelect(SourceType::System) => Page::MainMenu,
+                Page::SourceSelect(SourceType::Docker) => Page::Docker,
+                Page::SourceSelect(SourceType::Npm) => Page::Nvm,
+                _ => Page::MainMenu,
+            };
+            app.source_index = 0;
+            app.source_tested = false;
+        }
+        KeyCode::Up => app.source_index = app.source_index.saturating_sub(1),
+        KeyCode::Down => app.source_index = (app.source_index + 1).min(max - 1),
+        KeyCode::Enter => {
+            let selected_idx = app.source_index;
+            let mirror = &mirrors[selected_idx];
+            let name = match lang {
+                Lang::Chinese => mirror.name_cn,
+                Lang::English => mirror.name_en,
+            };
+            let url = mirror.url.clone();
+            let source_type = match &app.page {
+                Page::SourceSelect(t) => *t,
+                _ => SourceType::System,
+            };
+
+            app.status_msg = format!("正在切换到: {}...", name);
+
+            return Ok(Some(Action::Execute(Box::new(move |terminal| {
+                run_in_terminal(terminal, || match source_type {
+                    SourceType::System => crate::modules::sources::switch_system_mirror(&url),
+                    SourceType::Docker => crate::modules::sources::switch_docker_mirror(&url),
+                    SourceType::Npm => crate::modules::sources::switch_npm_registry(&url),
+                })?;
+                Ok(i18n::source_switch_ok(lang, name))
             }))));
         }
         _ => {}

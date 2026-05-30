@@ -2,6 +2,13 @@ use crate::config::Config;
 use crate::distro::Distro;
 use crate::i18n::Lang;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SourceType {
+    System,
+    Docker,
+    Npm,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum Page {
@@ -21,6 +28,7 @@ pub enum Page {
     NvmNodeVersion,
     Locale,
     Status(Box<StatusData>),
+    SourceSelect(SourceType),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,6 +110,12 @@ pub struct App {
     pub locale_configured: bool,
     pub fonts_installed: bool,
     pub fcitx_installed: bool,
+
+    // -- sources --
+    pub source_index: usize,
+    pub source_latencies: Vec<Option<u64>>,
+    pub source_recommended: Option<usize>,
+    pub source_tested: bool,
 }
 
 pub const THEMES: &[(&str, &str)] = &[
@@ -338,6 +352,11 @@ impl App {
             locale_configured: crate::modules::locale::is_locale_configured(),
             fonts_installed: crate::modules::locale::is_cjk_fonts_installed(),
             fcitx_installed: crate::modules::locale::is_fcitx_installed(),
+
+            source_index: 0,
+            source_latencies: vec![],
+            source_recommended: None,
+            source_tested: false,
         }
     }
 

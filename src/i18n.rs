@@ -32,6 +32,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("📝 Vim 配置", "安装 Vim, Vundle 和插件"),
             ("🟢 Node.js (nvm)", "安装 nvm 和 Node.js（可选版本）"),
             ("🇨🇳 中文配置", "配置中文 locale、字体和输入法（支持 Wayland/WPS）"),
+            ("🔁 系统源管理", "切换 pacman/apt 软件源镜像"),
         ],
         Lang::English => &[
             ("🐚 Shell Config", "Configure bash/zsh, oh-my-zsh"),
@@ -42,6 +43,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("📝 Vim Config", "Install Vim, Vundle and plugins"),
             ("🟢 Node.js (nvm)", "Install nvm and Node.js (choose version)"),
             ("🇨🇳 Chinese Config", "Configure Chinese locale, fonts and input"),
+            ("🔁 System Sources", "Switch pacman/apt mirror sources"),
         ],
     }
 }
@@ -209,6 +211,7 @@ pub fn docker_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("3. 配置非 root 用户", "将当前用户加入 docker 组"),
             ("4. 启动 Docker 服务", "启用并启动 docker.service"),
             ("5. 清空 Docker", "卸载 Docker 并移除配置"),
+            ("6. 切换 Docker 源", "切换 Docker Hub 镜像加速源"),
         ],
         Lang::English => &[
             ("1. Install Docker", "Install Docker engine"),
@@ -216,6 +219,7 @@ pub fn docker_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("3. Configure non-root", "Add current user to docker group"),
             ("4. Start Docker Service", "Enable and start docker.service"),
             ("5. Clear Docker", "Uninstall Docker and remove config"),
+            ("6. Switch Docker Mirror", "Switch Docker Hub registry mirror"),
         ],
     }
 }
@@ -595,11 +599,72 @@ pub fn nvm_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("1. 安装 nvm", "Node Version Manager，管理多版本 Node.js"),
             ("2. 安装 Node.js", "选择并安装最新版或 LTS 长期支持版"),
             ("3. 清空 nvm", "卸载 nvm 并删除所有 Node.js 版本"),
+            ("4. 切换 npm 源", "切换 npm registry 镜像源"),
         ],
         Lang::English => &[
             ("1. Install nvm", "Node Version Manager - manage multiple Node.js versions"),
             ("2. Install Node.js", "Choose between latest or LTS version"),
             ("3. Clear nvm", "Uninstall nvm and remove all Node.js versions"),
+            ("4. Switch npm Mirror", "Switch npm registry mirror"),
         ],
+    }
+}
+
+// ── Source Management ──────────────────────────────────────
+
+pub fn sources_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "系统源管理 — 选择镜像源",
+        Lang::English => "System Sources — Select Mirror",
+    }
+}
+
+pub fn docker_mirror_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "Docker 镜像加速 — 选择镜像源",
+        Lang::English => "Docker Mirror — Select Registry Mirror",
+    }
+}
+
+pub fn npm_mirror_title(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "npm 镜像源 — 选择 Registry",
+        Lang::English => "npm Registry — Select Mirror",
+    }
+}
+
+pub fn source_statusbar(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "↑↓ 导航  Enter 选择+切换  Esc 返回",
+        Lang::English => "↑↓ nav  Enter select+switch  Esc back",
+    }
+}
+
+pub fn source_latency(lang: Lang, ms: u64) -> String {
+    match lang {
+        Lang::Chinese => format!("{}ms", ms),
+        Lang::English => format!("{}ms", ms),
+    }
+}
+
+pub fn source_unreachable(lang: Lang) -> &'static str {
+    match lang { Lang::Chinese => "不可达", Lang::English => "unreachable" }
+}
+
+pub fn source_recommended(lang: Lang) -> &'static str {
+    match lang { Lang::Chinese => "★ 推荐", Lang::English => "★ Recommended" }
+}
+
+pub fn source_switch_ok(lang: Lang, name: &str) -> String {
+    match lang {
+        Lang::Chinese => format!("✅ 已切换到: {}，缓存已刷新", name),
+        Lang::English => format!("✅ Switched to: {}, cache refreshed", name),
+    }
+}
+
+pub fn source_switch_fail(lang: Lang, name: &str, err: &str) -> String {
+    match lang {
+        Lang::Chinese => format!("❌ 切换到 {} 失败: {}", name, err),
+        Lang::English => format!("❌ Failed to switch to {}: {}", name, err),
     }
 }
