@@ -17,10 +17,11 @@ pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
     for tool in selected {
+        // 已安装检测：覆盖包管理器 + snap + GitHub 二进制
+        if get_tool_status(tool) {
+            continue;
+        }
         if let Some(pkg) = distro::package_name(tool) {
-            if distro::is_package_installed(pkg) {
-                continue; // 已安装
-            }
             if distro::package_exists(pkg) {
                 apt_packages.push(pkg);
             } else {
@@ -270,11 +271,18 @@ fn find_binary(dir: &str, name: &str) -> anyhow::Result<String> {
 
 
 pub fn get_tool_status(tool: &str) -> bool {
+    // 1. 包管理器检测
     if let Some(pkg) = distro::package_name(tool) {
-        distro::is_package_installed(pkg)
-    } else {
-        false
+        if distro::is_package_installed(pkg) {
+            return true;
+        }
     }
+    // 2. 检查命令是否存在（覆盖 snap / GitHub 二进制安装 / cargo 等）
+    crate::utils::command_exists(match tool {
+        "fd" => "fdfind",  // Ubuntu apt 安装后二进制叫 fdfind
+        "bat" => "batcat", // Ubuntu apt 安装后二进制叫 batcat
+        other => other,
+    })
 }
 
 /// 确定 shell 配置目标：优先使用系统当前默认 shell（$SHELL），
