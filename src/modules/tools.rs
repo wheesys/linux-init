@@ -5,9 +5,18 @@ use std::io::Write;
 use std::process::Command;
 
 /// 安装工具列表：逐个安装，包管理器优先，失败时走 GitHub 二进制下载兜底
+/// 单个工具失败不影响后续安装，所有错误汇总返回
 pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
+    let mut errors: Vec<String> = Vec::new();
+
     for tool in selected {
-        install_single_tool(tool)?;
+        if let Err(e) = install_single_tool(tool) {
+            errors.push(format!("{}: {}", tool, e));
+        }
+    }
+
+    if !errors.is_empty() {
+        anyhow::bail!("以下工具安装失败:\n{}", errors.join("\n"));
     }
     Ok(())
 }
@@ -49,7 +58,7 @@ fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
 /// 从 GitHub release 下载 .deb 并 dpkg -i 安装
 fn install_github_deb(owner: &str, repo: &str, bin_name: &str) -> anyhow::Result<()> {
     let tag = fetch_latest_tag(owner, repo)?;
-    let deb_name = format!("{}_{}_amd64.deb", bin_name, &tag[1..]); // tag 如 "v0.8.1", 去 v
+    let deb_name = format!("{}_{}_linux_amd64.deb", bin_name, &tag[1..]); // tag 如 "v0.9.1", 去 v
     let url = format!(
         "https://github.com/{}/{}/releases/download/{}/{}",
         owner, repo, tag, deb_name
