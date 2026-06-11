@@ -5,7 +5,7 @@ use std::fs;
 pub fn is_installed() -> bool {
     match distro::detect().family() {
         DistroFamily::Arch => distro::is_package_installed("openssh"),
-        DistroFamily::Debian => distro::is_package_installed("openssh-server"),
+        DistroFamily::Debian | DistroFamily::Fedora => distro::is_package_installed("openssh-server"),
         _ => false,
     }
 }
@@ -13,7 +13,7 @@ pub fn is_installed() -> bool {
 pub fn install() -> anyhow::Result<()> {
     match distro::detect().family() {
         DistroFamily::Arch => distro::install_packages(&["openssh"]),
-        DistroFamily::Debian => distro::install_packages(&["openssh-server"]),
+        DistroFamily::Debian | DistroFamily::Fedora => distro::install_packages(&["openssh-server"]),
         _ => anyhow::bail!("不支持的发行版"),
     }
 }

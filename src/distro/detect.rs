@@ -24,11 +24,24 @@ pub fn detect_distro() -> Distro {
         "manjaro" => Distro::Manjaro,
         "ubuntu" => Distro::Ubuntu(version_id),
         "debian" => Distro::Debian(version_id),
+        "fedora" => {
+            // Fedora Silverblue/Kinoite 等 ostree 变体不支持
+            let variant_id = fields
+                .get("VARIANT_ID")
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            if matches!(variant_id, "silverblue" | "kinoite" | "sericea" | "onyx") {
+                return Distro::Unknown(format!("Fedora {}（ostree 变体不支持）", variant_id));
+            }
+            Distro::Fedora(version_id)
+        }
         _ => {
             if id_like.contains("arch") {
                 Distro::Arch
             } else if id_like.contains("debian") || id_like.contains("ubuntu") {
                 Distro::Debian(version_id)
+            } else if id_like.contains("fedora") || id_like.contains("rhel") {
+                Distro::Fedora(version_id)
             } else {
                 Distro::Unknown(id.to_string())
             }

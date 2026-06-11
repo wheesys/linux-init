@@ -32,7 +32,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("📝 Vim 配置", "安装 Vim, Vundle 和插件"),
             ("🟢 Node.js (nvm)", "安装 nvm 和 Node.js（可选版本）"),
             ("🇨🇳 中文配置", "配置中文 locale、字体和输入法（支持 Wayland/WPS）"),
-            ("🔁 系统源管理", "切换 pacman/apt 软件源镜像"),
+            ("🔁 系统源管理", "切换系统软件源镜像"),
         ],
         Lang::English => &[
             ("🐚 Shell Config", "Configure bash/zsh, oh-my-zsh"),
@@ -43,7 +43,7 @@ pub fn main_menu(lang: Lang) -> &'static [(&'static str, &'static str)] {
             ("📝 Vim Config", "Install Vim, Vundle and plugins"),
             ("🟢 Node.js (nvm)", "Install nvm and Node.js (choose version)"),
             ("🇨🇳 Chinese Config", "Configure Chinese locale, fonts and input"),
-            ("🔁 System Sources", "Switch pacman/apt mirror sources"),
+            ("🔁 System Sources", "Switch system mirror sources"),
         ],
     }
 }

@@ -1,17 +1,18 @@
 use crate::distro;
+use crate::distro::DistroFamily;
 use crate::utils::get_real_home;
 use std::fs;
 use std::io::Write;
 use std::process::Command;
 
-/// 安装工具列表：apt 批量 → snap 逐个 → GitHub 兜底
+/// 安装工具列表：包管理器批量 → snap 逐个 → GitHub 兜底
 /// 单个工具失败不影响后续，单行错误汇总返回
 pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
-    // 1. 刷新包管理器缓存（仅 Debian 系，只跑一次）
+    // 1. 刷新包管理器缓存（仅 Debian/Fedora 系，只跑一次）
     let _ = distro::refresh_cache();
 
     // 2. 分类
-    let mut apt_packages: Vec<&str> = Vec::new();
+    let mut repo_packages: Vec<&str> = Vec::new();
     let mut snap_tools: Vec<&str> = Vec::new();
     let mut github_tools: Vec<&str> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
@@ -23,7 +24,7 @@ pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
         }
         if let Some(pkg) = distro::package_name(tool) {
             if distro::package_exists(pkg) {
-                apt_packages.push(pkg);
+                repo_packages.push(pkg);
             } else {
                 snap_tools.push(tool);
             }
@@ -32,10 +33,10 @@ pub fn install_tools(selected: &[&str]) -> anyhow::Result<()> {
         }
     }
 
-    // 3. apt 批量安装
-    if !apt_packages.is_empty() {
-        if let Err(e) = distro::install_packages(&apt_packages) {
-            errors.push(format!("apt: {}", e));
+    // 3. 包管理器批量安装
+    if !repo_packages.is_empty() {
+        if let Err(e) = distro::install_packages(&repo_packages) {
+            errors.push(format!("repo: {}", e));
         }
     }
 
@@ -96,6 +97,7 @@ fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
     // 按关键词匹配 asset，上游改名也不受影响
     let asset_url = find_asset_url(&release.assets_json, tool, &release.tag)?;
     let is_deb = asset_url.ends_with(".deb");
+    let is_rpm = asset_url.ends_with(".rpm");
 
     let tmp_file = format!("/tmp/linux-init-{}.download", tool);
     download_file(&asset_url, &tmp_file)?;
@@ -109,6 +111,16 @@ fn install_via_github_release(tool: &str) -> anyhow::Result<()> {
         let _ = fs::remove_file(&tmp_file);
         if !status.success() {
             anyhow::bail!("{} deb 安装失败", tool);
+        }
+    } else if is_rpm {
+        let status = Command::new("sudo")
+            .args(["dnf", "install", "-y", &tmp_file])
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()?;
+        let _ = fs::remove_file(&tmp_file);
+        if !status.success() {
+            anyhow::bail!("{} rpm 安装失败", tool);
         }
     } else {
         let tmp_dir = format!("/tmp/linux-init-{}-extract", tool);
@@ -176,22 +188,29 @@ fn fetch_release(owner: &str, repo: &str) -> anyhow::Result<ReleaseInfo> {
 }
 
 /// 从 assets JSON 中按关键词匹配下载 URL
+/// 支持多组关键词回退（如 Fedora 先尝试 rpm，再回退 tar.gz）
 fn find_asset_url(assets_json: &str, tool: &str, _tag: &str) -> anyhow::Result<String> {
     let arch = if cfg!(target_arch = "x86_64") { "x86_64" }
         else if cfg!(target_arch = "aarch64") { "aarch64" }
         else { anyhow::bail!("不支持的 CPU 架构") };
 
-    // 每个工具定义一组匹配关键词（必须全部命中）
-    let keywords: Vec<&str> = match tool {
-        "duf"   => vec!["linux", arch, ".deb"],
-        "procs" => vec!["linux", arch, ".zip"],
-        "eza"   => vec!["linux", "gnu", ".tar.gz"],
-        "dust"  => vec!["linux", "gnu", ".tar.gz"],
+    let family = distro::detect().family();
+
+    // 每个工具定义多组匹配关键词（按优先级顺序，全部命中才算匹配）
+    let keyword_sets: Vec<Vec<&str>> = match tool {
+        "duf" => match family {
+            DistroFamily::Debian => vec![vec!["linux", arch, ".deb"]],
+            DistroFamily::Fedora => vec![vec!["linux", arch, ".rpm"], vec!["linux", arch, ".tar.gz"]],
+            _ => vec![vec!["linux", arch, ".tar.gz"]],
+        },
+        "procs" => vec![vec!["linux", arch, ".zip"]],
+        "eza" => vec![vec!["linux", "gnu", ".tar.gz"]],
+        "dust" => vec![vec!["linux", "gnu", ".tar.gz"]],
         _ => anyhow::bail!("{} 无匹配规则", tool),
     };
 
     // 从 JSON 中提取所有 browser_download_url
-    let mut best_url: Option<String> = None;
+    let mut urls: Vec<String> = Vec::new();
     for line in assets_json.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("\"browser_download_url\":") {
@@ -201,17 +220,23 @@ fn find_asset_url(assets_json: &str, tool: &str, _tag: &str) -> anyhow::Result<S
                 .trim_matches('"')
                 .trim_matches(',')
                 .to_string();
+            urls.push(url);
+        }
+    }
+
+    // 按关键词优先级匹配
+    for keywords in &keyword_sets {
+        for url in &urls {
             if keywords.iter().all(|kw| url.contains(kw)) {
-                best_url = Some(url);
-                break;
+                return Ok(url.clone());
             }
         }
     }
 
-    best_url.ok_or_else(|| anyhow::anyhow!(
-        "{} 未找到匹配的 release asset（关键词: {:?}），可能上游改名或架构不兼容",
-        tool, keywords
-    ))
+    anyhow::bail!(
+        "{} 未找到匹配的 release asset（关键词组: {:?}），可能上游改名或架构不兼容",
+        tool, keyword_sets
+    )
 }
 
 fn download_file(url: &str, dest: &str) -> anyhow::Result<()> {
@@ -278,9 +303,18 @@ pub fn get_tool_status(tool: &str) -> bool {
         }
     }
     // 2. 检查命令是否存在（覆盖 snap / GitHub 二进制安装 / cargo 等）
+    // Debian 的 fd-find 包二进制叫 fdfind，bat 包二进制叫 batcat
+    // Arch/Fedora 的包二进制与工具名一致
+    let family = distro::detect().family();
     crate::utils::command_exists(match tool {
-        "fd" => "fdfind",  // Ubuntu apt 安装后二进制叫 fdfind
-        "bat" => "batcat", // Ubuntu apt 安装后二进制叫 batcat
+        "fd" => match family {
+            DistroFamily::Debian => "fdfind",
+            _ => "fd",
+        },
+        "bat" => match family {
+            DistroFamily::Debian => "batcat",
+            _ => "bat",
+        },
         other => other,
     })
 }

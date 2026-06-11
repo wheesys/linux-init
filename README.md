@@ -7,13 +7,15 @@ Linux Init 是一个零依赖的命令行工具，通过图形化菜单引导用
 ## 功能特性
 
 - 🌐 **多语言支持** — 启动时选择中文或英文界面
-- 🐚 **Shell 配置** — 安装 zsh + Oh My Zsh，选择主题和插件，设为默认 shell
+- 🐚 **Shell 配置** — 安装 zsh + Oh My Zsh，选择主题和插件，设为默认 shell，支持清除还原
 - 🐳 **Docker 安装** — 安装 Docker 引擎和 Docker Compose，配置非 root 使用
 - 🔑 **SSH Key 生成** — 一键生成 Ed25519 或 RSA 密钥对
-- 🔧 **基础工具** — 批量安装常用开发工具（git, neovim, tmux, ripgrep 等）
+- 🔧 **基础工具** — 批量安装常用开发工具，支持别名配置和 direnv 集成
 - 🖥️ **SSH 服务** — 安装 OpenSSH Server，配置安全选项（禁止 root 登录），启动服务
 - 📝 **Vim 配置** — 安装 Vim、Vundle 插件管理器，选择 12+ 实用插件
-- 🇨🇳 **中文配置** — 配置中文 locale、CJK 字体和 Fcitx5 输入法
+- 🟢 **Node.js (nvm)** — 安装 nvm 版本管理器，可选安装 Node.js Latest/LTS
+- 🇨🇳 **中文配置** — 配置中文 locale、CJK 字体和 Fcitx5 输入法（支持 Wayland/WPS）
+- 🔁 **系统源管理** — 切换 pacman/apt/Docker/NPM 镜像源，支持自动测速选优
 
 ## 支持的发行版
 
@@ -49,7 +51,9 @@ sudo dpkg -i linux-init_*.deb
 
 ## 使用指南
 
-启动后会进入 TUI 界面，使用方向键导航：
+启动后会进入 TUI 界面。所有操作通过键盘完成，无需鼠标。
+
+### 主菜单结构
 
 ```
 语言选择 (中文 / English)
@@ -58,43 +62,75 @@ sudo dpkg -i linux-init_*.deb
 ├── 🐚 Shell 配置
 │   ├── 安装 Zsh
 │   ├── 安装 Oh My Zsh (支持 GitHub/Gitee 镜像自动回退)
-│   ├── 选择主题 (13+ 内置主题，带彩色预览)
-│   ├── 选择插件 (14+ 可选插件)
-│   └── 设为默认 Shell
+│   ├── 选择主题 (13+ 内置主题，带预览)
+│   ├── 选择插件 (14+ 可选插件，自动下载第三方插件)
+│   ├── 设为默认 Shell
+│   └── 🗑️ 清除 Shell 配置（还原为 bash）
 ├── 🐳 Docker 安装
-│   ├── 安装 Docker 引擎
-│   ├── 安装 Docker Compose
+│   ├── 安装 Docker 引擎 (Debian/Ubuntu 使用官方脚本)
+│   ├── 安装 Docker Compose (已内置在官方脚本中)
 │   ├── 配置非 root 用户
-│   └── 启动 Docker 服务
+│   ├── 启动 Docker 服务
+│   └── 🗑️ 清除 Docker 配置
 ├── 🔑 SSH Key 生成
 │   ├── 生成 Ed25519 密钥 (推荐)
 │   ├── 生成 RSA 4096 密钥
-│   └── 查看已有公钥
+│   ├── 查看已有公钥
+│   └── 🗑️ 清除已有密钥
 ├── 🔧 基础工具 (多选安装)
-│   ├── 开发工具: git, curl, wget, neovim, jq
-│   ├── 系统工具: htop, tmux
-│   └── CLI 增强: ripgrep, fd, bat, eza
+│   ├── 开发工具: git, curl, wget, neovim, jq, direnv
+│   ├── 系统监控: btop, dust, duf, procs
+│   ├── CLI 增强: ripgrep, fd, bat, eza, zoxide, fzf
+│   ├── 配置别名 (bat → batcat 等，自动适配)
+│   ├── 配置 direnv shell hook
+│   └── 🗑️ 清除选中的工具
 ├── 🖥️ SSH 服务
 │   ├── 安装 OpenSSH Server
 │   ├── 配置安全选项 (禁止 root 远程登录)
-│   └── 启动 SSH 服务
+│   ├── 启动 SSH 服务
+│   └── 🗑️ 清除 SSH 服务
 ├── 📝 Vim 配置
 │   ├── 安装 Vim
 │   ├── 安装 Vundle 插件管理器
-│   └── 选择插件 (12+ 实用插件，含功能描述)
-└── 🇨🇳 中文配置
-    ├── 配置中文 locale
-    ├── 安装中文字体 (Noto CJK)
-    └── 安装 Fcitx5 输入法
+│   ├── 选择插件 (12+ 实用插件，含功能描述)
+│   └── 🗑️ 清除 Vim 配置
+├── 🟢 Node.js (nvm)
+│   ├── 安装 nvm (Node Version Manager)
+│   ├── 安装 Node.js Latest 版本
+│   ├── 安装 Node.js LTS 版本
+│   ├── 配置 shell 集成
+│   └── 🗑️ 清除 nvm
+├── 🇨🇳 中文配置
+│   ├── 配置中文 locale
+│   ├── 安装中文字体 (Noto CJK + WPS 兼容字体)
+│   ├── 安装 Fcitx5 输入法
+│   └── 🗑️ 清除中文配置
+└── 🔁 系统源管理
+    ├── 系统源 (pacman/apt) — 清华/中科大/阿里云/腾讯云 + 自动测速
+    ├── Docker 镜像源 — 国内镜像加速器
+    └── NPM 镜像源 — npmmirror/淘宝源
 ```
 
-**操作快捷键：**
-- `↑` `↓` — 上下导航
-- `Enter` — 确认选择
-- `Space` — 切换选中状态（多选列表）
-- `a` — 全选/取消全选
-- `Esc` — 返回上级菜单
-- `q` — 退出程序
+### 键盘操作
+
+**全局快捷键：**
+
+| 按键 | 功能 |
+|------|------|
+| `↑` `↓` / `j` `k` | 上下导航 |
+| `数字键 1-9` | 快速跳转到对应菜单项 |
+| `Enter` | 确认选择 / 执行操作 |
+| `Space` | 切换选中状态（多选列表） |
+| `a` | 全选 / 取消全选（多选列表） |
+| `Esc` | 返回上级菜单 |
+| `q` | 退出程序 |
+
+**子页面操作说明：**
+
+- **多选列表**（工具、插件等）：`Space` 勾选/取消，`a` 全选/取消全选，`Enter` 确认安装
+- **数字输入框**（SSH 邮箱等）：直接输入文本，`Enter` 确认，`Esc` 取消
+- **源管理页面**：进入后自动测速各镜像延迟，选择延迟最低的按 `Enter` 切换
+- **清除功能**：各模块最后一项为 🗑️ 清除项，选择后二次确认执行
 
 ## 依赖
 
@@ -124,9 +160,11 @@ Linux Init 在运行时会使用以下系统工具和命令行程序：
 
 | 工具 | 用途 | 触发功能 |
 |------|------|----------|
-| curl | 下载安装脚本 | Shell (Oh My Zsh)、Node.js (nvm) |
+| curl | 下载安装脚本 | Shell (Oh My Zsh)、Node.js (nvm)、Docker (官方脚本) |
 | git | 克隆插件仓库 | Shell (Oh My Zsh 插件)、Vim (Vundle 及插件) |
 | vim | 执行 `:PluginInstall` | Vim (插件安装) |
+| snap | Ubuntu 备用包管理器 | 基础工具 (apt 不可用时自动回退) |
+
 
 ### 功能模块所需软件包
 
@@ -135,11 +173,14 @@ Linux Init 在运行时会使用以下系统工具和命令行程序：
 | 模块 | 安装的软件包 |
 |------|------------|
 | Shell 配置 | zsh |
-| Docker 安装 | docker, docker-compose (或 docker-compose-v2) |
+| Docker 安装 | docker, docker-compose (Debian/Ubuntu 使用 Docker 官方脚本) |
 | SSH 服务 | openssh (Arch) 或 openssh-server (Debian) |
 | 中文配置 | noto-fonts-cjk (或 fonts-noto-cjk), fcitx5, fcitx5-chinese-addons, fcitx5-configtool |
-| 基础工具 | 用户选择的工具（如 git, curl, wget, htop, neovim, tmux, jq, ripgrep, fd, bat, eza） |
+| 基础工具 | 用户选择的工具，支持 apt → snap → GitHub Release 三级回退 |
 | Vim 配置 | vim |
+| Node.js (nvm) | nvm (curl 安装脚本) + 可选 Node.js Latest/LTS |
+
+> **Ubuntu/Debian 工具安装策略：** 优先使用 apt 安装；apt 缺失时自动回退到 snap；snap 也失败时从 GitHub Release 下载二进制。已安装检测覆盖全部三种方式。
 
 ## 技术栈
 
@@ -153,24 +194,57 @@ Linux Init 在运行时会使用以下系统工具和命令行程序：
 linux-init/
 ├── src/
 │   ├── main.rs           # 入口和事件循环
-│   ├── app.rs            # 应用状态管理
+│   ├── app.rs            # 应用状态管理 (App 结构体、页面枚举、事件处理)
+│   ├── config.rs         # 配置文件管理 (~/.config/linux-init/config.json)
+│   ├── i18n.rs           # 国际化 (中英文所有界面文本)
+│   ├── utils.rs          # 工具函数 (获取真实用户、shell配置路径等)
 │   ├── distro/           # 发行版检测与包管理适配
-│   │   ├── detect.rs     # /etc/os-release 解析
-│   │   ├── pacman.rs     # Arch 系包管理
-│   │   └── apt.rs        # Debian 系包管理
-│   ├── i18n.rs           # 国际化 (中英文)
+│   │   ├── mod.rs        # Distro 结构体、发行版检测
+│   │   ├── pacman.rs     # Arch 系包管理 (pacman)
+│   │   └── apt.rs        # Debian 系包管理 (apt + snap + GitHub fallback)
 │   ├── modules/          # 业务逻辑模块
-│   │   ├── shell.rs      # Shell 配置
-│   │   ├── docker.rs     # Docker 安装
-│   │   ├── ssh.rs        # SSH 密钥生成
+│   │   ├── mod.rs        # 模块注册
+│   │   ├── shell.rs      # Shell 配置 (zsh/omz/主题/插件/默认shell)
+│   │   ├── docker.rs     # Docker 安装 (引擎/compose/用户组/服务)
+│   │   ├── ssh.rs        # SSH 密钥生成 (Ed25519/RSA)
 │   │   ├── ssh_server.rs # SSH 服务配置
-│   │   ├── tools.rs      # 工具安装
-│   │   ├── vim.rs        # Vim 配置
-│   │   └── locale.rs     # 中文配置
+│   │   ├── tools.rs      # 工具安装 (20+ 工具、别名、direnv)
+│   │   ├── vim.rs        # Vim 配置 (Vim/Vundle/插件)
+│   │   ├── nvm.rs        # Node.js (nvm + Node 版本安装)
+│   │   ├── locale.rs     # 中文配置 (locale/字体/输入法)
+│   │   └── sources.rs    # 镜像源管理 (pacman/apt/Docker/NPM + 测速)
 │   └── ui/               # TUI 界面渲染
-│       └── mod.rs        # 界面组件和事件处理
+│       └── mod.rs        # 所有界面的渲染和事件处理
 ├── Cargo.toml
-└── README.md
+├── README.md
+└── LICENSE
+```
+
+## 配置文件
+
+程序运行后自动在 `~/.config/linux-init/config.json` 保存安装状态，下次启动时可看到各模块的完成情况。
+
+```json
+{
+  "language": "zh",
+  "completed": {
+    "zsh_installed": true,
+    "omz_installed": true,
+    "zsh_theme": "agnoster",
+    "zsh_plugins": ["git", "zsh-autosuggestions"],
+    "zsh_default": true,
+    "docker_installed": true,
+    "docker_compose_installed": true,
+    "docker_user_configured": true,
+    "docker_service_running": true,
+    "ssh_key_generated": true,
+    "ssh_key_type": "ed25519",
+    "tools_installed": ["git", "neovim", "ripgrep", "fd", "bat", "eza"],
+    "nvm_installed": true,
+    "node_installed": true,
+    "...": "..."
+  }
+}
 ```
 
 ## 开发

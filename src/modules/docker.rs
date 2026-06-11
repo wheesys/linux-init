@@ -4,14 +4,14 @@ use std::process::{Command, Stdio};
 
 /// docker 安装
 /// - Arch 系: pacman -S docker
-/// - Debian 系: Docker 官方安装脚本 (get.docker.com)，自动包含 compose 插件
+/// - Debian/Fedora 系: Docker 官方安装脚本 (get.docker.com)，自动包含 compose 插件
 pub fn install_docker() -> anyhow::Result<()> {
     let family = distro::detect().family();
     match family {
         DistroFamily::Arch => {
             distro::install_packages(&["docker"])?;
         }
-        DistroFamily::Debian => {
+        DistroFamily::Debian | DistroFamily::Fedora => {
             install_docker_via_official_script()?;
         }
         _ => anyhow::bail!("不支持的发行版"),
@@ -50,19 +50,19 @@ fn install_docker_via_official_script() -> anyhow::Result<()> {
 
 /// docker-compose 安装
 /// - Arch 系: pacman -S docker-compose
-/// - Debian 系: 官方脚本已自带 compose 插件 (docker compose)，检查后决定是否装独立版
+/// - Debian/Fedora 系: 官方脚本已自带 compose 插件 (docker compose)，检查后决定是否装独立版
 pub fn install_compose() -> anyhow::Result<()> {
     let family = distro::detect().family();
     match family {
         DistroFamily::Arch => {
             distro::install_packages(&["docker-compose"])?;
         }
-        DistroFamily::Debian => {
+        DistroFamily::Debian | DistroFamily::Fedora => {
             // 官方脚本安装后 compose 插件已可用
             if is_compose_plugin_available() {
                 return Ok(());
             }
-            // 兜底：apt 安装独立版本
+            // 兜底：安装独立版本
             distro::install_packages(&["docker-compose-v2"])?;
         }
         _ => anyhow::bail!("不支持的发行版"),

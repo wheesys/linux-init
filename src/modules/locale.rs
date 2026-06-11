@@ -13,6 +13,9 @@ pub fn configure_locale() -> anyhow::Result<()> {
         DistroFamily::Debian => {
             configure_locale_debian()?;
         }
+        DistroFamily::Fedora => {
+            configure_locale_fedora()?;
+        }
         _ => anyhow::bail!("不支持的发行版"),
     }
 
@@ -72,6 +75,24 @@ fn configure_locale_arch() -> anyhow::Result<()> {
 
 fn configure_locale_debian() -> anyhow::Result<()> {
     configure_locale_arch()
+}
+
+/// Fedora 使用 localectl 配置 locale（不同于 Arch/Debian 的 locale.gen）
+fn configure_locale_fedora() -> anyhow::Result<()> {
+    // 安装中文 langpack
+    distro::install_packages(&["glibc-langpack-zh"])?;
+
+    // 设置系统 locale
+    let status = Command::new("sudo")
+        .args(["localectl", "set-locale", "LANG=zh_CN.UTF-8"])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("localectl set-locale 失败");
+    }
+    Ok(())
 }
 
 /// 需要安装的中文字体包列表

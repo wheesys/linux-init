@@ -3,6 +3,7 @@ use std::process::{Command, Stdio};
 use crate::utils::{get_real_home, DownloadLogger};
 
 pub fn install_zsh() -> anyhow::Result<()> {
+    crate::distro::refresh_cache().ok();
     crate::distro::install_packages(&["zsh"])
 }
 

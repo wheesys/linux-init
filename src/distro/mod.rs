@@ -1,6 +1,7 @@
 mod detect;
 mod pacman;
 mod apt;
+mod dnf;
 
 use std::fmt;
 
@@ -11,6 +12,7 @@ pub enum Distro {
     Manjaro,
     Ubuntu(String),
     Debian(String),
+    Fedora(String),
     Unknown(String),
 }
 
@@ -22,6 +24,7 @@ impl fmt::Display for Distro {
             Distro::Manjaro => write!(f, "Manjaro"),
             Distro::Ubuntu(v) => write!(f, "Ubuntu {}", v),
             Distro::Debian(v) => write!(f, "Debian {}", v),
+            Distro::Fedora(v) => write!(f, "Fedora {}", v),
             Distro::Unknown(s) => write!(f, "Unknown ({})", s),
         }
     }
@@ -32,6 +35,7 @@ impl Distro {
         match self {
             Distro::Arch | Distro::CachyOS | Distro::Manjaro => DistroFamily::Arch,
             Distro::Ubuntu(_) | Distro::Debian(_) => DistroFamily::Debian,
+            Distro::Fedora(_) => DistroFamily::Fedora,
             Distro::Unknown(_) => DistroFamily::Unknown,
         }
     }
@@ -41,6 +45,7 @@ impl Distro {
 pub enum DistroFamily {
     Arch,
     Debian,
+    Fedora,
     Unknown,
 }
 
@@ -53,6 +58,7 @@ pub fn install_packages(packages: &[&str]) -> anyhow::Result<()> {
     match distro.family() {
         DistroFamily::Arch => pacman::install(packages),
         DistroFamily::Debian => apt::install(packages),
+        DistroFamily::Fedora => dnf::install(packages),
         DistroFamily::Unknown => anyhow::bail!("不支持的发行版: {}", distro),
     }
 }
@@ -62,6 +68,7 @@ pub fn uninstall_packages(packages: &[&str]) -> anyhow::Result<()> {
     match distro.family() {
         DistroFamily::Arch => pacman::uninstall(packages),
         DistroFamily::Debian => apt::uninstall(packages),
+        DistroFamily::Fedora => dnf::uninstall(packages),
         DistroFamily::Unknown => anyhow::bail!("不支持的发行版: {}", distro),
     }
 }
@@ -77,25 +84,28 @@ pub fn is_package_installed(package: &str) -> bool {
     match distro.family() {
         DistroFamily::Arch => pacman::is_installed(package),
         DistroFamily::Debian => apt::is_installed(package),
+        DistroFamily::Fedora => dnf::is_installed(package),
         DistroFamily::Unknown => false,
     }
 }
 
-/// 包是否在系统仓库中存在（仅 Debian 系实际检查 apt-cache）
+/// 包是否在系统仓库中存在（Arch/Fedora 默认 true，Debian 系实际检查 apt-cache）
 pub fn package_exists(package: &str) -> bool {
     let distro = detect();
     match distro.family() {
         DistroFamily::Arch => true,
         DistroFamily::Debian => apt::package_exists(package),
+        DistroFamily::Fedora => dnf::package_exists(package),
         DistroFamily::Unknown => false,
     }
 }
 
-/// 刷新包管理器缓存（仅 Debian 系需要 apt update）
+/// 刷新包管理器缓存
 pub fn refresh_cache() -> anyhow::Result<()> {
     let distro = detect();
     match distro.family() {
         DistroFamily::Debian => apt::update(),
+        DistroFamily::Fedora => dnf::update(),
         _ => Ok(()),
     }
 }
@@ -105,6 +115,7 @@ pub fn package_name(tool: &str) -> Option<&'static str> {
     match distro.family() {
         DistroFamily::Arch => pacman::package_name(tool),
         DistroFamily::Debian => apt::package_name(tool),
+        DistroFamily::Fedora => dnf::package_name(tool),
         DistroFamily::Unknown => None,
     }
 }
