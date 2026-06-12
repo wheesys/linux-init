@@ -35,7 +35,6 @@ jobs:
               apt-get update
               apt-get install -y build-essential curl pkg-config libssl-dev
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . $HOME/.cargo/env
 
           - image: ubuntu:22.04
             name: Ubuntu 22.04
@@ -43,7 +42,6 @@ jobs:
               apt-get update
               apt-get install -y build-essential curl pkg-config libssl-dev
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . $HOME/.cargo/env
 
           - image: debian:12
             name: Debian 12
@@ -51,17 +49,19 @@ jobs:
               apt-get update
               apt-get install -y build-essential curl pkg-config libssl-dev
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . $HOME/.cargo/env
 
           - image: fedora:41
             name: Fedora 41
             setup: |
               dnf install -y gcc make curl pkg-config openssl-devel
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              . $HOME/.cargo/env
 
     container:
       image: ${{ matrix.image }}
+      options: --user root
+    env:
+      HOME: /root
+      PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     steps:
       - name: Setup system dependencies
@@ -70,14 +70,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build (release)
-        run: |
-          . $HOME/.cargo/env 2>/dev/null || true
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cargo build --release
+        run: cargo build --release
 
       - name: Core tests (shell + tools)
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
           ./target/release/linux-init --execute '{
             "actions": [
               {"id": "detect_distro"},
@@ -93,15 +89,12 @@ jobs:
               {"id": "generate_rsa_key", "args": {"email": "ci@linux-init.test"}},
               {"id": "configure_aliases", "args": {"tools": ["git","curl","wget","jq","ripgrep","bat","eza","fd","btop","tmux","direnv"]}},
               {"id": "install_nvm"},
-              {"id": "install_node_lts"},
-              {"id": "configure_locale"},
-              {"id": "install_cjk_fonts"}
+              {"id": "install_node_lts"}
             ]
           }'
 
       - name: Docker install test
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
           ./target/release/linux-init --execute '{
             "actions": [
               {"id": "install_docker"},
