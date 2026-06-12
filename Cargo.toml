@@ -1,6 +1,6 @@
 [package]
 name = "linux-init"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Linux 环境初始化工具 - TUI 向导"
 license = "MIT"
