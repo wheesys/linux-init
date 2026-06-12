@@ -302,4 +302,4 @@ cargo fmt
 
 ## 许可证
 
-MIT License - 详见 [LICENSE](LICENSE)
+MIT © 2026 wheesys - 详见 [LICENSE](LICENSE)
