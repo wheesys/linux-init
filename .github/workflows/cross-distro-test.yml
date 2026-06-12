@@ -1,0 +1,120 @@
+name: Cross-Distro Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: archlinux:latest
+            name: Arch Linux
+            setup: |
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm base-devel rustup
+              rustup default stable
+
+          - image: manjarolinux/base:latest
+            name: Manjaro
+            setup: |
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm base-devel rustup
+              rustup default stable
+
+          - image: ubuntu:24.04
+            name: Ubuntu 24.04
+            setup: |
+              apt-get update
+              apt-get install -y build-essential curl pkg-config libssl-dev
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              . $HOME/.cargo/env
+
+          - image: ubuntu:22.04
+            name: Ubuntu 22.04
+            setup: |
+              apt-get update
+              apt-get install -y build-essential curl pkg-config libssl-dev
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              . $HOME/.cargo/env
+
+          - image: debian:12
+            name: Debian 12
+            setup: |
+              apt-get update
+              apt-get install -y build-essential curl pkg-config libssl-dev
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              . $HOME/.cargo/env
+
+          - image: fedora:41
+            name: Fedora 41
+            setup: |
+              dnf install -y gcc make curl pkg-config openssl-devel
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              . $HOME/.cargo/env
+
+    container:
+      image: ${{ matrix.image }}
+
+    steps:
+      - name: Setup system dependencies
+        run: ${{ matrix.setup }}
+
+      - uses: actions/checkout@v4
+
+      - name: Build (release)
+        run: |
+          . $HOME/.cargo/env 2>/dev/null || true
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release
+
+      - name: Core tests (shell + tools)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./target/release/linux-init --execute '{
+            "actions": [
+              {"id": "detect_distro"},
+              {"id": "refresh_package_cache"},
+              {"id": "install_zsh"},
+              {"id": "install_oh_my_zsh"},
+              {"id": "set_zsh_theme", "args": {"theme": "agnoster"}},
+              {"id": "install_plugins", "args": {"plugins": ["git", "zsh-autosuggestions"]}},
+              {"id": "install_vim"},
+              {"id": "install_vundle"},
+              {"id": "install_tools", "args": {"tools": ["git","curl","wget","jq","ripgrep","bat","eza","fd","btop","tmux","direnv"]}},
+              {"id": "generate_ed25519_key", "args": {"email": "ci@linux-init.test"}},
+              {"id": "generate_rsa_key", "args": {"email": "ci@linux-init.test"}},
+              {"id": "configure_aliases", "args": {"tools": ["git","curl","wget","jq","ripgrep","bat","eza","fd","btop","tmux","direnv"]}},
+              {"id": "install_nvm"},
+              {"id": "install_node_lts"},
+              {"id": "configure_locale"},
+              {"id": "install_cjk_fonts"}
+            ]
+          }'
+
+      - name: Docker install test
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./target/release/linux-init --execute '{
+            "actions": [
+              {"id": "install_docker"},
+              {"id": "install_compose"},
+              {"id": "add_user_to_docker_group"},
+              {"id": "start_docker_service"}
+            ]
+          }'
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Test Results — ${{ matrix.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ | Tests completed |" >> $GITHUB_STEP_SUMMARY

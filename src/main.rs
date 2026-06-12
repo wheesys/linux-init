@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod distro;
+mod execute;
 mod i18n;
 mod modules;
 mod ui;
@@ -11,6 +12,13 @@ use app::App;
 use ui::Action;
 
 fn main() -> Result<()> {
+    // --execute <JSON> 非交互模式：绕过 TUI，直接执行模块函数
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "--execute" {
+        execute::setup_container_root_env()?;
+        return execute::run_execute(&args[2]);
+    }
+
     let distro = distro::detect();
     let mut terminal = ui::setup_terminal()?;
     let mut app = App::new(distro);

@@ -247,6 +247,39 @@ linux-init/
 }
 ```
 
+## 脚本化安装（非交互模式）
+
+使用 `--execute` 参数传入 JSON 配置，可以在不启动 TUI 的情况下完成批量安装，适合 CI/CD 和自动化脚本：
+
+```bash
+sudo ./target/release/linux-init --execute '{
+  "actions": [
+    {"id": "install_zsh"},
+    {"id": "install_oh_my_zsh"},
+    {"id": "set_zsh_theme", "args": {"theme": "agnoster"}},
+    {"id": "install_plugins", "args": {"plugins": ["git", "zsh-autosuggestions"]}},
+    {"id": "install_tools", "args": {"tools": ["git","curl","ripgrep","bat","eza","fd"]}},
+    {"id": "generate_ed25519_key", "args": {"email": "me@example.com"}}
+  ]
+}'
+```
+
+执行后 stdout 输出 JSON 结果，exit code 0 表示全部成功。
+
+## 跨发行版自动化测试
+
+项目使用 GitHub Actions + Docker 容器在 6 个发行版上自动测试，参见 `.github/workflows/cross-distro-test.yml`。
+
+本地手动测试：
+
+```bash
+# 在 Arch Linux 容器中测试
+docker run --rm -v "$(pwd):/build" -w /build archlinux:latest bash -c '
+  pacman -Syu --noconfirm && pacman -S --noconfirm base-devel rustup && rustup default stable && \
+  cargo build --release && \
+  ./target/release/linux-init --execute '\''{"actions":[{"id":"install_zsh"},{"id":"install_tools","args":{"tools":["git","curl","ripgrep"]}}]}'\'
+```
+
 ## 开发
 
 ```bash
