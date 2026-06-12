@@ -1,0 +1,40 @@
+name: AUR Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  aur-publish:
+    name: Publish to AUR
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse version from tag
+        id: version
+        run: |
+          # Strip 'v' prefix from tag: v0.2.1 -> 0.2.1
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download SHA256 checksum
+        run: |
+          curl -fsSLo checksum.txt \
+            "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/linux-init-x86_64-unknown-linux-gnu.tar.gz.sha256"
+          SHA256=$(awk '{print $1}' checksum.txt)
+          echo "sha256=$SHA256" >> "$GITHUB_ENV"
+
+      - name: Set up SSH for AUR
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+      - name: Update and push to AUR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ env.sha256 }}
+        run: bash packaging/aur/update-aur.sh

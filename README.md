@@ -19,13 +19,14 @@ Linux Init 是一个零依赖的命令行工具，通过图形化菜单引导用
 
 ## 支持的发行版
 
-| 发行版 | 包管理器 | 说明 |
-|--------|----------|------|
-| Arch Linux | pacman | 原生支持 |
-| CachyOS | pacman | Arch 衍生版 |
-| Manjaro | pacman | Arch 衍生版 |
-| Ubuntu | apt | 推荐 LTS 版本 |
-| Debian | apt | 推荐 Stable 版本 |
+| 发行版 | 包管理器 | 安装方式 |
+|--------|----------|----------|
+| Arch Linux | pacman | `yay -S linux-init-bin` |
+| CachyOS | pacman | `yay -S linux-init-bin` |
+| Manjaro | pacman | `yay -S linux-init-bin` |
+| Fedora | dnf | `dnf copr enable wheesys/linux-init` |
+| Ubuntu | apt | 预编译二进制 / 源码编译 |
+| Debian | apt | 预编译二进制 / 源码编译 |
 
 ## 快速开始
 
@@ -39,14 +40,27 @@ cargo build --release
 sudo ./target/release/linux-init
 ```
 
-### 安装（待实现）
+### 安装
 
 ```bash
-# Arch Linux / CachyOS / Manjaro
-yay -S linux-init
+# Arch Linux / CachyOS / Manjaro (AUR)
+yay -S linux-init-bin
+# 或
+paru -S linux-init-bin
 
-# Ubuntu / Debian
-sudo dpkg -i linux-init_*.deb
+# Fedora (COPR)
+sudo dnf copr enable wheesys/linux-init
+sudo dnf install linux-init
+
+# 预编译二进制 (通用 Linux x86_64)
+curl -fsSL https://github.com/wheesys/linux-init/releases/latest/download/linux-init-x86_64-unknown-linux-gnu.tar.gz | tar xz
+sudo cp linux-init /usr/local/bin/
+
+# 从源码编译
+git clone https://github.com/wheesys/linux-init.git
+cd linux-init
+cargo build --release
+sudo cp target/release/linux-init /usr/local/bin/
 ```
 
 ## 使用指南

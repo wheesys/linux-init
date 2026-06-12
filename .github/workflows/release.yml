@@ -30,8 +30,9 @@ jobs:
 
       - name: Package binary
         run: |
+          cp LICENSE target/x86_64-unknown-linux-gnu/release/
           cd target/x86_64-unknown-linux-gnu/release
-          tar czf linux-init-x86_64-unknown-linux-gnu.tar.gz linux-init
+          tar czf linux-init-x86_64-unknown-linux-gnu.tar.gz linux-init LICENSE
           sha256sum linux-init-x86_64-unknown-linux-gnu.tar.gz > linux-init-x86_64-unknown-linux-gnu.tar.gz.sha256
 
       - name: Create GitHub Release
@@ -46,6 +47,14 @@ jobs:
             ### 安装
 
             ```bash
+            # Arch Linux / CachyOS / Manjaro (AUR)
+            yay -S linux-init-bin
+
+            # Fedora (COPR)
+            sudo dnf copr enable wheesys/linux-init
+            sudo dnf install linux-init
+
+            # 预编译二进制
             tar xzf linux-init-x86_64-unknown-linux-gnu.tar.gz
             sudo cp linux-init /usr/local/bin/
             ```

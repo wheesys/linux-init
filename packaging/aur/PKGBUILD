@@ -1,0 +1,18 @@
+# Maintainer: wheesys
+pkgname=linux-init-bin
+pkgver=__VERSION__
+pkgrel=1
+pkgdesc="Linux 环境初始化工具 - TUI 向导"
+arch=('x86_64')
+url="https://github.com/wheesys/linux-init"
+license=('MIT')
+depends=()
+provides=('linux-init')
+conflicts=('linux-init')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/wheesys/linux-init/releases/download/v${pkgver}/linux-init-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('__SHA256__')
+
+package() {
+    install -Dm755 "$srcdir/linux-init" "$pkgdir/usr/bin/linux-init"
+    install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
