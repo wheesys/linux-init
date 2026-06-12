@@ -93,9 +93,8 @@ pub fn is_package_installed(package: &str) -> bool {
 pub fn package_exists(package: &str) -> bool {
     let distro = detect();
     match distro.family() {
-        DistroFamily::Arch => true,
+        DistroFamily::Arch | DistroFamily::Fedora => true,
         DistroFamily::Debian => apt::package_exists(package),
-        DistroFamily::Fedora => dnf::package_exists(package),
         DistroFamily::Unknown => false,
     }
 }
