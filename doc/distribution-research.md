@@ -197,3 +197,97 @@ GitHub Release (v*) → SCM 触发 COPR 构建 → Fedora 用户可用
 - [Fedora Rust Packaging Guidelines](https://docs.fedoraproject.org/en-US/packaging-guidelines/Rust/)
 - [COPR User Documentation](https://docs.copr.fedorainfracloud.org/user_documentation.html)
 - [Fedora Discussion: COPR with Rust](https://discussion.fedoraproject.org/t/how-do-i-use-copr-with-rust-and-dependencies/91676)
+
+---
+
+## 8. ⚠️ 手动操作清单（待执行）
+
+> 代码已就绪 (2026-06-12)，以下步骤需要手动操作才能激活 AUR 和 COPR。
+
+### 8.1 AUR 首次配置
+
+#### 8.1.1 生成专用 SSH Key
+
+```bash
+# 在本机执行（不要加密码 -N ""）
+ssh-keygen -t ed25519 -C "aur-bot@linux-init" -N "" -f ~/.ssh/aur-bot-key
+
+# 查看公钥（贴到 AUR 账户设置用）
+cat ~/.ssh/aur-bot-key.pub
+
+# 查看私钥（贴到 GitHub Secrets 用）
+cat ~/.ssh/aur-bot-key
+```
+
+#### 8.1.2 注册 AUR 账户
+
+1. 访问 https://aur.archlinux.org/register 注册账户
+2. 登录后进入 https://aur.archlinux.org/account/用户名/edit
+3. 在 "SSH Public Key" 字段粘贴 `aur-bot-key.pub` 的内容
+4. 保存
+
+#### 8.1.3 添加 GitHub Secret
+
+1. 访问 https://github.com/wheesys/linux-init/settings/secrets/actions
+2. 点击 "New repository secret"
+3. Name: `AUR_SSH_PRIVATE_KEY`
+4. Value: 粘贴 `aur-bot-key`（私钥）的全部内容
+5. 点击 "Add secret"
+
+#### 8.1.4 首次手动推送 AUR 包
+
+```bash
+# 克隆 AUR 空仓库
+git clone ssh://aur@aur.archlinux.org/linux-init-bin.git /tmp/aur-linux-init-bin
+cd /tmp/aur-linux-init-bin
+
+# 从项目仓库复制 PKGBUILD 并替换占位符
+cp /home/zl/code/linux-init/packaging/aur/PKGBUILD .
+
+# 手动写入当前版本号和 sha256（以 v0.2.1 为例）
+# 先从 GitHub Release 获取 sha256:
+curl -fsSL https://github.com/wheesys/linux-init/releases/download/v0.2.1/linux-init-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# 替换版本号和 sha256
+sed -i 's/pkgver=__VERSION__/pkgver=0.2.1/' PKGBUILD
+sed -i 's/__SHA256__/<实际sha256值>/' PKGBUILD
+
+# 生成 .SRCINFO
+makepkg --printsrcinfo > .SRCINFO
+
+# 提交推送
+git add PKGBUILD .SRCINFO
+git commit -m "Initial import: 0.2.1"
+git push
+```
+
+> 首次推送后，后续每次 Release 时 `aur-publish.yml` 会自动更新。
+
+### 8.2 COPR 首次配置
+
+1. 用 Fedora 账户登录 https://copr.fedorainfracloud.org
+2. 点击 "New Project"
+3. Project name: `linux-init`
+4. 在 "Packages" → "New package" → 选择 "SCM" 方式
+5. Clone URL: `https://github.com/wheesys/linux-init`
+6. Committish: `master`
+7. Subdirectory: `packaging/copr`
+8. Spec File: `linux-init.spec`
+9. 保存
+
+> SCM 构建会在 GitHub 推送后自动触发。也可在 COPR 页面手动点击 "Rebuild"。
+
+### 8.3 验证
+
+```bash
+# AUR 验证（Arch 环境）
+yay -S linux-init-bin
+
+# COPR 验证（Fedora 环境）
+sudo dnf copr enable wheesys/linux-init
+sudo dnf install linux-init
+
+# 后续更新
+yay -Syu linux-init-bin   # Arch
+sudo dnf update linux-init # Fedora
+```
