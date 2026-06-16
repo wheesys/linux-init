@@ -53,6 +53,11 @@ pub fn detect() -> Distro {
     detect::detect_distro()
 }
 
+/// 检测是否在 WSL 环境中运行
+pub fn is_wsl() -> bool {
+    detect::is_wsl()
+}
+
 pub fn install_packages(packages: &[&str]) -> anyhow::Result<()> {
     let distro = detect();
     match distro.family() {

@@ -108,9 +108,14 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Page::SourceSelect(_) => i18n::source_statusbar(lang),
         _ => i18n::statusbar_nav(lang),
     };
+    let distro_str = if app.is_wsl {
+        format!("{} [WSL]", app.distro)
+    } else {
+        app.distro.to_string()
+    };
     let mut spans = vec![
         Span::styled(
-            format!(" {} | {} ", app.distro, lang),
+            format!(" {} | {} ", distro_str, lang),
             Style::default().fg(C_PRIMARY).add_modifier(Modifier::BOLD),
         ),
         Span::styled(" │ ", Style::default().fg(Color::Reset)),
@@ -1060,10 +1065,25 @@ fn handle_main_menu(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Actio
         KeyCode::Enter => {
             app.page = match app.menu_index {
                 0 => Page::Shell,
-                1 => Page::Docker,
-                2 => Page::Ssh,
+                1 => {
+                    if app.is_wsl {
+                        app.status_msg = i18n::wsl_docker_desktop_hint(app.lang).into();
+                    }
+                    Page::Docker
+                }
+                2 => {
+                    if app.is_wsl {
+                        app.status_msg = i18n::wsl_ssh_windows_key_hint(app.lang).into();
+                    }
+                    Page::Ssh
+                }
                 3 => Page::Tools,
-                4 => Page::SshServer,
+                4 => {
+                    if app.is_wsl {
+                        app.status_msg = i18n::wsl_ssh_server_warning(app.lang).into();
+                    }
+                    Page::SshServer
+                }
                 5 => Page::Vim,
                 6 => Page::Nvm,
                 7 => Page::Locale,
@@ -1078,7 +1098,10 @@ fn handle_main_menu(app: &mut App, key: KeyEvent) -> anyhow::Result<Option<Actio
                 }
                 _ => return Ok(None),
             };
-            app.status_msg = i18n::msg_press_esc(app.lang).into();
+            // WSL 提示优先，不覆盖
+            if app.status_msg.is_empty() {
+                app.status_msg = i18n::msg_press_esc(app.lang).into();
+            }
         }
         _ => {}
     }

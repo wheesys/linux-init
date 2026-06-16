@@ -40,6 +40,7 @@ pub struct StatusData {
 
 pub struct App {
     pub distro: Distro,
+    pub is_wsl: bool,
     pub lang: Lang,
     pub lang_selected: bool,
     pub config: Config,
@@ -248,6 +249,7 @@ pub const TOOLS: &[(&str, &str, &str)] = &[
 impl App {
     pub fn new(distro: Distro) -> Self {
         let config = Config::load();
+        let is_wsl = crate::distro::is_wsl();
         let home = Self::get_real_home();
         let zsh_installed = crate::distro::is_package_installed("zsh");
         let omz_installed = home.join(".oh-my-zsh").exists();
@@ -294,6 +296,7 @@ impl App {
 
         Self {
             distro,
+            is_wsl,
             lang,
             lang_selected,
             config,

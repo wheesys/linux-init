@@ -84,6 +84,7 @@ pub struct ActionArgs {
 struct ExecuteEnv {
     in_container: bool,
     is_root: bool,
+    is_wsl: bool,
 }
 
 /// 单个 action 执行结果
@@ -114,6 +115,7 @@ struct Summary {
 struct ExecuteOutput {
     distro: String,
     in_container: bool,
+    is_wsl: bool,
     running_as_root: bool,
     results: Vec<ActionResult>,
     summary: Summary,
@@ -150,6 +152,9 @@ fn dispatch_action(id: &str, args: &ActionArgs, env: &ExecuteEnv) -> Result<(), 
         "set_default_shell" => {
             if env.in_container {
                 return Err("SKIP:chsh_not_available_in_container".into());
+            }
+            if env.is_wsl {
+                return Err("SKIP:chsh_not_available_in_wsl".into());
             }
             crate::modules::shell::set_default_shell().map_err(|e| e.to_string())
         }
@@ -432,6 +437,7 @@ pub fn run_execute(json_spec: &str) -> anyhow::Result<()> {
     let env = ExecuteEnv {
         in_container: container,
         is_root: root,
+        is_wsl: crate::distro::is_wsl(),
     };
 
     eprintln!("╔══════════════════════════════════════════╗");
@@ -439,6 +445,7 @@ pub fn run_execute(json_spec: &str) -> anyhow::Result<()> {
     eprintln!("╠══════════════════════════════════════════╣");
     eprintln!("║  发行版: {:32} ║", distro_info.to_string());
     eprintln!("║  容器:   {:32} ║", if container { "是 ✓" } else { "否" });
+    eprintln!("║  WSL:    {:32} ║", if env.is_wsl { "是 ✓" } else { "否" });
     eprintln!("║  root:   {:32} ║", if root { "是 ✓" } else { "否" });
     eprintln!("╚══════════════════════════════════════════╝");
     eprintln!();
@@ -515,6 +522,7 @@ pub fn run_execute(json_spec: &str) -> anyhow::Result<()> {
     let output = ExecuteOutput {
         distro: distro_info.to_string(),
         in_container: container,
+        is_wsl: env.is_wsl,
         running_as_root: root,
         summary: Summary {
             total: results.len(),

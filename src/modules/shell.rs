@@ -256,6 +256,9 @@ pub fn install_third_party_plugin(name: &str) -> anyhow::Result<()> {
 }
 
 pub fn set_default_shell() -> anyhow::Result<()> {
+    if crate::distro::is_wsl() {
+        return configure_wsl_default_shell();
+    }
     let which_zsh = Command::new("which").arg("zsh").output()?;
     let zsh_path = String::from_utf8_lossy(&which_zsh.stdout).trim().to_string();
 
@@ -310,9 +313,46 @@ pub fn get_bundled_theme_list() -> Vec<(String, String)> {
     themes
 }
 
+/// WSL 环境：通过 .bashrc exec zsh 实现默认 shell 切换
+fn configure_wsl_default_shell() -> anyhow::Result<()> {
+    let home = get_real_home()?;
+    let bashrc = home.join(".bashrc");
+    let marker = "# linux-init: set zsh as default shell in WSL";
+    let exec_line = r#"[ -z "$WSL_INTEROP" ] || exec zsh"#;
+
+    let content = fs::read_to_string(&bashrc).unwrap_or_default();
+    if content.contains(marker) {
+        return Ok(());
+    }
+
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&bashrc)?;
+    writeln!(file)?;
+    writeln!(file, "{}", marker)?;
+    writeln!(file, "{}", exec_line)?;
+    Ok(())
+}
+
 pub fn clear_shell() -> anyhow::Result<()> {
-    // 1. 还原默认 shell 为 bash（如果当前是 zsh）
-    if let Ok(bash_path) = Command::new("which").arg("bash").output() {
+    // 1. 还原默认 shell 为 bash（WSL 下跳过 chsh，清理 .bashrc 标记）
+    if crate::distro::is_wsl() {
+        if let Ok(home) = get_real_home() {
+            let bashrc = home.join(".bashrc");
+            if let Ok(content) = fs::read_to_string(&bashrc) {
+                let marker = "# linux-init: set zsh as default shell in WSL";
+                let exec_line = r#"[ -z "$WSL_INTEROP" ] || exec zsh"#;
+                let new_content: String = content
+                    .lines()
+                    .filter(|l| l.trim() != marker && l.trim() != exec_line)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let _ = fs::write(&bashrc, new_content);
+            }
+        }
+    } else if let Ok(bash_path) = Command::new("which").arg("bash").output() {
         let bash_path = String::from_utf8_lossy(&bash_path.stdout).trim().to_string();
         if !bash_path.is_empty() {
             let _ = Command::new("chsh")

@@ -102,6 +102,10 @@ fn configure_locale_fedora() -> anyhow::Result<()> {
 const CJK_FONT_PACKAGES: &[&str] = &["noto-fonts-cjk", "wqy-microhei", "wqy-zenhei"];
 
 pub fn install_cjk_fonts() -> anyhow::Result<()> {
+    // WSL 环境跳过字体安装（Windows 处理显示）
+    if crate::distro::is_wsl() {
+        return Ok(());
+    }
     // 检查是否已有中文字体
     if is_cjk_fonts_installed() {
         return Ok(());

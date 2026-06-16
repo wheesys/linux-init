@@ -2,6 +2,27 @@ use std::fs;
 use std::process::Command;
 use crate::utils::get_real_home;
 
+/// 扫描 Windows 端 SSH 密钥（WSL 下 /mnt/c/Users/*/.ssh/）
+#[allow(dead_code)]
+pub fn get_windows_ssh_keys() -> Vec<(String, String)> {
+    let mut keys = Vec::new();
+    let base = std::path::Path::new("/mnt/c/Users");
+    if !base.exists() {
+        return keys;
+    }
+    if let Ok(entries) = std::fs::read_dir(base) {
+        for entry in entries.flatten() {
+            let ssh_dir = entry.path().join(".ssh");
+            if ssh_dir.join("id_ed25519.pub").exists() {
+                keys.push(("Ed25519".into(), ssh_dir.join("id_ed25519").to_string_lossy().into()));
+            }
+            if ssh_dir.join("id_rsa.pub").exists() {
+                keys.push(("RSA".into(), ssh_dir.join("id_rsa").to_string_lossy().into()));
+            }
+        }
+    }
+    keys
+}
 pub fn generate_ed25519(email: &str) -> anyhow::Result<String> {
     let home = get_real_home()?;
     let ssh_dir = home.join(".ssh");

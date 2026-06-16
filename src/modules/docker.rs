@@ -2,10 +2,27 @@ use crate::distro::{self, DistroFamily};
 use crate::utils;
 use std::process::{Command, Stdio};
 
+/// 检测是否可通过 WSL interop 使用 Windows 端的 Docker Desktop
+fn has_docker_desktop() -> bool {
+    crate::utils::command_exists("docker.exe")
+        || Command::new("docker")
+            .arg("version")
+            .output()
+            .map(|o| {
+                let s = String::from_utf8_lossy(&o.stdout);
+                s.contains("Docker Desktop") || s.contains("moby")
+            })
+            .unwrap_or(false)
+}
+
 /// docker 安装
 /// - Arch 系: pacman -S docker
 /// - Debian/Fedora 系: Docker 官方安装脚本 (get.docker.com)，自动包含 compose 插件
 pub fn install_docker() -> anyhow::Result<()> {
+    // WSL: 如果已有 Docker Desktop，跳过原生安装
+    if crate::distro::is_wsl() && has_docker_desktop() {
+        return Ok(());
+    }
     let family = distro::detect().family();
     match family {
         DistroFamily::Arch => {

@@ -49,6 +49,18 @@ pub fn detect_distro() -> Distro {
     }
 }
 
+/// 检测是否在 WSL 环境中运行（支持 WSL2）
+pub fn is_wsl() -> bool {
+    // /proc/sys/fs/binfmt_misc/WSLInterop 存在于 WSL1 和 WSL2
+    if std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists() {
+        return true;
+    }
+    // Fallback: 检查 /proc/version 中的 Microsoft/WSL 标记
+    std::fs::read_to_string("/proc/version")
+        .map(|s| s.to_lowercase().contains("microsoft") || s.contains("WSL"))
+        .unwrap_or(false)
+}
+
 fn parse_os_release(content: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for line in content.lines() {

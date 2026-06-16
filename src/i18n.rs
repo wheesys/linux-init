@@ -675,3 +675,50 @@ pub fn source_switch_fail(lang: Lang, name: &str, err: &str) -> String {
         Lang::English => format!("❌ Failed to switch to {}: {}", name, err),
     }
 }
+
+// ── WSL ──────────────────────────────────────────────────────
+
+#[allow(dead_code)]
+pub fn wsl_detected(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "WSL",
+        Lang::English => "WSL",
+    }
+}
+
+#[allow(dead_code)]
+pub fn wsl_no_chsh_warning(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "⚠ WSL 不支持 chsh，将通过 .bashrc 配置默认 shell",
+        Lang::English => "⚠ WSL doesn't support chsh, will configure via .bashrc",
+    }
+}
+
+pub fn wsl_docker_desktop_hint(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "💡 提示: 可使用 Windows 端的 Docker Desktop（需在 Windows 中安装并启用 WSL 集成）",
+        Lang::English => "💡 Tip: You can use Docker Desktop from Windows (install on Windows and enable WSL integration)",
+    }
+}
+
+pub fn wsl_ssh_server_warning(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "⚠ WSL 环境通常不需要 SSH 服务（Windows 管理网络连接）",
+        Lang::English => "⚠ SSH server is usually unnecessary in WSL (Windows manages networking)",
+    }
+}
+
+pub fn wsl_ssh_windows_key_hint(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "💡 提示: 可复用 Windows 端 SSH 密钥 (/mnt/c/Users/.../.ssh/)",
+        Lang::English => "💡 Tip: You can reuse Windows SSH keys from /mnt/c/Users/.../.ssh/",
+    }
+}
+
+#[allow(dead_code)]
+pub fn wsl_fonts_skip(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Chinese => "ℹ WSL 环境跳过字体安装（Windows 处理显示）",
+        Lang::English => "ℹ Skipping font installation in WSL (Windows handles display)",
+    }
+}
